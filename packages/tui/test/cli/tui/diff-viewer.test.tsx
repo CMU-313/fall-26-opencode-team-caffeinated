@@ -202,6 +202,7 @@ const session = {
   directory: "/repo/session",
   title: "Session",
   version: "1",
+  experienceMode: "intermediate",
   time: {
     created: 0,
     updated: 0,

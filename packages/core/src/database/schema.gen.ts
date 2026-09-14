@@ -179,6 +179,13 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_preference\` (
+          \`id\` integer PRIMARY KEY,
+          \`experience_mode\` text DEFAULT 'intermediate' NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
@@ -205,6 +212,7 @@ export default {
           \`permission\` text,
           \`agent\` text,
           \`model\` text,
+          \`experience_mode\` text DEFAULT 'intermediate' NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           \`time_compacting\` integer,

@@ -3424,6 +3424,7 @@ export class Session2 extends HeyApiClient {
       }
       permission?: PermissionRuleset
       workspaceID?: string
+      experienceMode?: "beginner" | "intermediate" | "expert"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3441,6 +3442,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "metadata" },
             { in: "body", key: "permission" },
             { in: "body", key: "workspaceID" },
+            { in: "body", key: "experienceMode" },
           ],
         },
       ],
@@ -3566,6 +3568,7 @@ export class Session2 extends HeyApiClient {
         [key: string]: unknown
       }
       permission?: PermissionRuleset
+      experienceMode?: "beginner" | "intermediate" | "expert"
       time?: {
         archived?: number
       }
@@ -3583,6 +3586,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "title" },
             { in: "body", key: "metadata" },
             { in: "body", key: "permission" },
+            { in: "body", key: "experienceMode" },
             { in: "body", key: "time" },
           ],
         },

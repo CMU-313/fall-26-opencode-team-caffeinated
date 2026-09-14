@@ -11,6 +11,7 @@ import { ascending } from "../identifier"
 import { SessionID } from "../session-id"
 import { WorkspaceID } from "../workspace-id"
 import { PermissionV1 } from "./permission"
+import { ExperienceMode } from "../experience-mode"
 
 const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 
@@ -565,6 +566,7 @@ export const SessionInfo = Schema.Struct({
   }),
   permission: optional(PermissionV1.Ruleset),
   revert: optional(SessionRevert),
+  experienceMode: ExperienceMode,
 }).annotate({ identifier: "Session" })
 export type SessionInfo = typeof SessionInfo.Type
 

@@ -234,6 +234,7 @@ const layer = Layer.effect(
                 variant: input.model.variant,
               }
             : undefined,
+          experienceMode: "intermediate",
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: now, updated: now },

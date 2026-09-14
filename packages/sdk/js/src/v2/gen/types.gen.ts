@@ -218,6 +218,7 @@ export type Session = {
     snapshot?: string
     diff?: string
   }
+  experienceMode: "beginner" | "intermediate" | "expert"
 }
 
 export type OutputFormatText = {
@@ -2243,6 +2244,7 @@ export type GlobalSession = {
     snapshot?: string
     diff?: string
   }
+  experienceMode: "beginner" | "intermediate" | "expert"
   project: ProjectSummary | null
 }
 
@@ -9485,6 +9487,7 @@ export type SessionCreateData = {
     }
     permission?: PermissionRuleset
     workspaceID?: string
+    experienceMode?: "beginner" | "intermediate" | "expert"
   }
   path?: never
   query?: {
@@ -9617,6 +9620,7 @@ export type SessionUpdateData = {
       [key: string]: unknown
     }
     permission?: PermissionRuleset
+    experienceMode?: "beginner" | "intermediate" | "expert"
     time?: {
       archived?: number
     }
