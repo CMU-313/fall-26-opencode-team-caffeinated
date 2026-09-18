@@ -252,6 +252,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return paths
   })
   const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
+  const [experienceMode, setExperienceMode] = createSignal<"beginner" | "intermediate" | "expert">("intermediate")
+  createEffect(on(() => info()?.experienceMode, (value) => {
+    if (value) setExperienceMode(value)
+  }))
+  const selectExperienceMode = async (value: "beginner" | "intermediate" | "expert") => {
+    const previous = experienceMode()
+    setExperienceMode(value)
+    const sessionID = props.controls.session.id
+    if (!sessionID) {
+      restoreFocus()
+      return
+    }
+    try {
+      await sdk().client.session.update({
+        sessionID,
+        directory: info()?.directory ?? sdk().directory,
+        experienceMode: value,
+      })
+    } catch (error) {
+      setExperienceMode(previous)
+      showToast({ title: language.t("prompt.toast.experienceModeUpdateFailed.title"), description: String(error) })
+    }
+    restoreFocus()
+  }
   const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
@@ -1227,6 +1251,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onAbort: props.onAbort,
       onSubmit: props.onSubmit,
       model: props.controls.model.selection,
+      experienceMode,
     })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1673,6 +1698,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       />
                     </TooltipKeybind>
                   </div>
+                </Show>
+                <Show when={store.mode !== "shell"}>
+                  <Select
+                    size="normal"
+                    options={["beginner", "intermediate", "expert"]}
+                    current={experienceMode()}
+                    label={(value) => language.t(("prompt.experienceMode." + value) as Parameters<typeof language.t>[0])}
+                    onSelect={(value) => void selectExperienceMode(value as "beginner" | "intermediate" | "expert")}
+                    class="max-w-[160px] text-text-base"
+                    valueClass="truncate text-13-regular text-text-base"
+                    triggerStyle={control()}
+                    triggerProps={{ "data-action": "prompt-experience-mode", "aria-label": language.t("prompt.experienceMode.label") }}
+                    variant="ghost"
+                  />
                 </Show>
                 <Show when={!providersLoading()}>
                   <Show when={store.mode !== "shell"}>

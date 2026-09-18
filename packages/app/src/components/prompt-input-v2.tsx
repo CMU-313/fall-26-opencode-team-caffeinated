@@ -4,9 +4,10 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { Select } from "@opencode-ai/ui/select"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
-import { createEffect, createMemo, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import type { PromptInputProps } from "@/components/prompt-input/contracts"
@@ -42,6 +43,10 @@ export type PromptInputV2ComposerProps = {
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
+  readonly experienceMode: {
+    current: () => "beginner" | "intermediate" | "expert"
+    select: (value: "beginner" | "intermediate" | "expert") => Promise<void>
+  }
 }
 
 export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
@@ -74,6 +79,17 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
           />
         }
       />
+      <div class="flex items-center">
+        <Select
+          size="normal"
+          options={["beginner", "intermediate", "expert"]}
+          current={props.controller.experienceMode.current()}
+          label={(value) => language.t(("prompt.experienceMode." + value) as Parameters<typeof language.t>[0])}
+          onSelect={(value) => void props.controller.experienceMode.select(value as "beginner" | "intermediate" | "expert")}
+          triggerProps={{ "data-action": "prompt-experience-mode", "aria-label": language.t("prompt.experienceMode.label") }}
+          variant="ghost"
+        />
+      </div>
     </div>
   )
 }
@@ -112,6 +128,30 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     }, [])
   })
   const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
+  const [experienceMode, setExperienceMode] = createSignal<"beginner" | "intermediate" | "expert">("intermediate")
+  createEffect(on(() => info()?.experienceMode, (value) => {
+    if (value) setExperienceMode(value)
+  }))
+  const selectExperienceMode = async (value: "beginner" | "intermediate" | "expert") => {
+    const previous = experienceMode()
+    setExperienceMode(value)
+    const sessionID = props.controls.session.id
+    if (!sessionID) {
+      controller.restoreFocus()
+      return
+    }
+    try {
+      await sdk().client.session.update({
+        sessionID,
+        directory: info()?.directory ?? sdk().directory,
+        experienceMode: value,
+      })
+    } catch (error) {
+      setExperienceMode(previous)
+      showToast({ title: language.t("prompt.toast.experienceModeUpdateFailed.title"), description: String(error) })
+    }
+    controller.restoreFocus()
+  }
   const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
   const attachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
@@ -219,6 +259,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
     model: props.controls.model.selection,
+    experienceMode,
   })
 
   const referenceDescription = (reference: ReferenceInfo) =>
@@ -465,7 +506,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     ),
   )
 
-  return controller as PromptInputV2ComposerController
+  return Object.assign(controller, {
+    experienceMode: { current: experienceMode, select: selectExperienceMode },
+  }) as PromptInputV2ComposerController
 }
 
 function PromptInputV2ModelControl(props: {

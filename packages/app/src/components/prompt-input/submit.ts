@@ -229,6 +229,7 @@ type PromptSubmitInput = {
   onAbort?: () => void
   onSubmit?: () => void
   model?: ModelSelection
+  experienceMode?: Accessor<"beginner" | "intermediate" | "expert">
 }
 
 export function createPromptSubmit(input: PromptSubmitInput) {
@@ -405,6 +406,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           agent: currentAgent.name,
           model: { id: currentModel.id, providerID: currentModel.provider.id, variant },
           location: { directory: sessionDirectory },
+          experienceMode: input.experienceMode?.(),
         })
         .then(normalizeSessionInfo)
         .catch((err) => {

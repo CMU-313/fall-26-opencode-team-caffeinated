@@ -45,6 +45,7 @@ import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { DialogSelect } from "../../ui/dialog-select"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
@@ -161,6 +162,26 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const session = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
+  const [experienceMode, setExperienceMode] = createSignal<"beginner" | "intermediate" | "expert">("intermediate")
+  createEffect(on(() => session()?.experienceMode, (value) => {
+    if (value) setExperienceMode(value)
+  }))
+  const selectExperienceMode = async (value: "beginner" | "intermediate" | "expert") => {
+    const previous = experienceMode()
+    setExperienceMode(value)
+    if (!props.sessionID) return
+    try {
+      const result = await sdk.client.session.update({
+        sessionID: props.sessionID,
+        directory: session()?.directory ?? paths.cwd,
+        experienceMode: value,
+      })
+      if (!result.error) return
+    } catch {}
+    setExperienceMode(previous)
+    toast.show({ message: "Unable to update response style", variant: "error" })
+  }
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -797,6 +818,31 @@ export function Prompt(props: PromptProps) {
     commands: stashCommands(),
   }))
 
+  useBindings(() => ({
+    target: inputTarget,
+    enabled: inputTarget() !== undefined && !props.disabled && store.mode === "normal",
+    bindings: [{
+      key: "ctrl+e",
+      desc: "Choose response style",
+      group: "Prompt",
+      cmd: () => dialog.replace(() => (
+        <DialogSelect
+          title="Response style"
+          current={experienceMode()}
+          options={[
+            { value: "beginner", title: "Beginner", description: "Detailed explanations for learning" },
+            { value: "intermediate", title: "Intermediate", description: "Balanced explanations and tradeoffs" },
+            { value: "expert", title: "Expert", description: "Concise, implementation-first responses" },
+          ]}
+          onSelect={(option) => {
+            void selectExperienceMode(option.value as "beginner" | "intermediate" | "expert")
+            dialog.clear()
+          }}
+        />
+      )),
+    }],
+  }))
+
   useBindings(() => {
     return {
       target: inputTarget,
@@ -1006,6 +1052,7 @@ export function Prompt(props: PromptProps) {
           id: selectedModel.modelID,
           variant,
         },
+        experienceMode: experienceMode(),
       })
 
       if (res.error) {
@@ -1455,6 +1502,7 @@ export function Prompt(props: PromptProps) {
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{Locale.titlecase(experienceMode())}</text>
                           <text
                             flexShrink={0}
                             fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
