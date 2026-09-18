@@ -554,6 +554,37 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
+const experienceModes = [
+  { mode: "beginner" as const, text: "The developer prefers a beginner experience." },
+  { mode: "intermediate" as const, text: "The developer prefers an intermediate experience." },
+  { mode: "expert" as const, text: "The developer prefers an expert experience." },
+]
+
+experienceModes.forEach(({ mode, text }) =>
+  it.instance("loop includes " + mode + " experience instructions in the provider request", () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        experienceMode: mode,
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* llm.hang
+      yield* user(chat.id, "hello")
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for experience-mode request", "10 seconds")
+
+      const hits = yield* llm.hits
+      expect(JSON.stringify(hits[0]?.body)).toContain(text)
+      expect(JSON.stringify(yield* sessions.messages({ sessionID: chat.id }))).not.toContain(text)
+      yield* Fiber.interrupt(fiber)
+    }),
+  ),
+)
+
 withMcpInstructions.instance(
   "loop includes MCP instructions in model system context",
   () =>
