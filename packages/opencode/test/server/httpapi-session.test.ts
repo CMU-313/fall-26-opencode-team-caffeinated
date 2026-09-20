@@ -228,6 +228,8 @@ function requestJson<T>(path: string, init?: RequestInit) {
   return request(path, init).pipe(Effect.flatMap(json<T>))
 }
 
+const experienceModes = ["beginner", "intermediate", "expert"] as const
+
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await disposeAllInstances()
@@ -235,6 +237,93 @@ afterEach(async () => {
 })
 
 describe("session HttpApi", () => {
+  for (const experienceMode of experienceModes) {
+    it.instance(
+      `persists ${experienceMode} for this and future sessions without changing other sessions`,
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+          const sessionA = yield* requestJson<Session.Info>(SessionPaths.create, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ title: "A", experienceMode: "beginner" }),
+          })
+          const sessionB = yield* requestJson<Session.Info>(SessionPaths.create, { method: "POST", headers })
+          expect(sessionB.experienceMode).toBe("beginner")
+          const updated = yield* requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: sessionB.id }), {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({ experienceMode, experienceModeScope: "session_and_preference" }),
+          })
+          expect(updated.experienceMode).toBe(experienceMode)
+          expect(
+            yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: sessionA.id }), { headers }),
+          ).toMatchObject({ experienceMode: "beginner" })
+          expect(
+            (yield* requestJson<Session.Info[]>(SessionPaths.list, { headers })).find((item) => item.id === sessionB.id),
+          ).toMatchObject({ experienceMode })
+          const sessionC = yield* requestJson<Session.Info>(SessionPaths.create, { method: "POST", headers })
+          expect(sessionC.experienceMode).toBe(experienceMode)
+        }),
+      { git: true, config: { formatter: false, lsp: false } },
+    )
+
+    it.instance(
+      `keeps ${experienceMode} scoped to the selected session when requested`,
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+          const sessionA = yield* requestJson<Session.Info>(SessionPaths.create, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ title: "A", experienceMode: "beginner" }),
+          })
+          const sessionB = yield* requestJson<Session.Info>(SessionPaths.create, { method: "POST", headers })
+          const updated = yield* requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: sessionB.id }), {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({ experienceMode, experienceModeScope: "session" }),
+          })
+          expect(updated.experienceMode).toBe(experienceMode)
+          expect(
+            yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: sessionA.id }), { headers }),
+          ).toMatchObject({ experienceMode: "beginner" })
+          const sessionC = yield* requestJson<Session.Info>(SessionPaths.create, { method: "POST", headers })
+          expect(sessionC.experienceMode).toBe("beginner")
+        }),
+      { git: true, config: { formatter: false, lsp: false } },
+    )
+  }
+
+  it.instance(
+    "defaults new sessions to Intermediate and exposes the mode on create, get, list, update, and fork responses",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const created = yield* requestJson<Session.Info>(SessionPaths.create, { method: "POST", headers })
+        expect(created.experienceMode).toBe("intermediate")
+        expect(yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: created.id }), { headers })).toMatchObject({
+          experienceMode: "intermediate",
+        })
+        expect((yield* requestJson<Session.Info[]>(SessionPaths.list, { headers })).find((item) => item.id === created.id)).toMatchObject({
+          experienceMode: "intermediate",
+        })
+        const updated = yield* requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: created.id }), {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ experienceMode: "expert", experienceModeScope: "session" }),
+        })
+        expect(updated.experienceMode).toBe("expert")
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.fork, { sessionID: created.id }), { method: "POST", headers }),
+        ).toMatchObject({ experienceMode: "expert" })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
   it.effect("maps busy sessions to public session busy errors", () =>
     Effect.gen(function* () {
       const sessionID = SessionID.descending()
