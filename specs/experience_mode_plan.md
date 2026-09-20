@@ -15,18 +15,41 @@ The modes are:
   - Give only a short explanation after an implementation unless more detail is requested.
   - State design decisions explicitly.
   - When a material design choice is unclear, ask the developer instead of choosing speculatively.
-The user chooses a mode from a dropdown on the main prompt surface.
+The user invokes the mode picker with the `/skill-mode` slash command, following the
+same command-menu interaction pattern as `/models` and `/connect`. It is not a
+persistent control on the main prompt surface, and `ctrl+e` must not open it.
+
+`/skill-mode` immediately opens a first selector with Beginner, Intermediate, and
+Expert. Selecting a mode immediately opens a second selector that determines
+the selection's scope:
+- For this and future sessions
+- For this session only
+- For the next prompt only
+
+The command itself is not included in, or submitted as, a user prompt.
 Required behavior
 Mode is a session-level setting.
 - Every session has its own stored experienceMode.
 - Changing a session’s mode affects future provider turns in that session.
 - Changing Session B does not alter Session A.
 - A durable local preference supplies the default for future sessions.
-- When a session mode is explicitly changed, that selected mode becomes the default for later sessions.
-- A session created with an explicit mode also updates that future-session default.
+- Choosing “For this and future sessions” updates both the selected session and
+  the durable local preference used by later sessions.
+- Choosing “For this session only” updates the selected session without
+  changing the durable local preference.
+- Choosing “For the next prompt only” does not update either stored session
+  mode or the durable preference. It applies only to the immediately following
+  submitted prompt, then subsequent prompts use the previously stored session
+  mode again.
+- A session created with an explicit persistent mode also updates the
+  future-session default. On the first prompt of a new session, all three
+  scopes are available: persistent selection is passed during creation,
+  session-only selection is applied immediately after creation, and a
+  next-prompt selection is sent only with the first prompt.
 - A newly created session with no explicit mode inherits the stored preference.
 - The initial default is intermediate.
-- Per-message overrides are explicitly out of scope for this version.
+- The one-prompt override is transient: it must not appear as a changed mode in
+  session list/get responses, sync state, or a later session load.
 Example:
 1. Session A starts as Beginner.
 2. Session B starts as Beginner.
@@ -88,15 +111,36 @@ Legacy session update
 Extend legacy PATCH /session/:sessionID input:
 {
   // existing fields...
-  experienceMode?: "beginner" | "intermediate" | "expert"
+  experienceMode?: "beginner" | "intermediate" | "expert",
+  experienceModeScope?: "session" | "session_and_preference"
 }
 Behavior:
 - Update only the selected session’s session.experience_mode.
-- Update session_preference.experience_mode.
+- When experienceModeScope is `session_and_preference`, also update
+  session_preference.experience_mode.
+- When experienceModeScope is `session`, leave session_preference unchanged.
+- For backwards compatibility, an update that supplies experienceMode without
+  experienceModeScope uses `session_and_preference`.
 - Update the session’s normal time_updated.
 - Return the updated session.
 - Do not alter other sessions.
 A dedicated route such as POST /session/:sessionID/experience-mode is unnecessary for this version; the existing legacy session update endpoint is the natural compatibility surface.
+
+Legacy prompt override
+Extend the legacy prompt submission input with an optional transient field:
+{
+  // existing fields...
+  experienceMode?: "beginner" | "intermediate" | "expert"
+}
+Behavior:
+- When omitted, construct the provider request from the session’s stored mode.
+- When supplied by `/skill-mode` with “For the next prompt only,” use it only for
+  that submitted prompt’s provider request.
+- Do not persist it to session.experience_mode or session_preference, and do
+  not expose it as a session update/sync event.
+- The override applies to the complete execution started by that prompt,
+  including provider continuation turns and tool-loop continuations, so a
+  single user request has one consistent response style.
 Legacy session-service changes
 In packages/opencode/src/session/session.ts:
 - Add experienceMode to the legacy Session.Info schema and TypeScript type.
@@ -106,11 +150,15 @@ In packages/opencode/src/session/session.ts:
 - Resolve a new session’s mode from either explicit creation input or the singleton preference.
 - Persist explicit creation choices as the future default.
 - Add a setExperienceMode operation to the legacy session service, or incorporate it cleanly into the existing update pathway.
-- Update mode and preference in a database transaction where practical, so the session update and default preference do not diverge.
+- Support explicit session-only and session-and-preference update scopes.
+- Update the mode and preference in a database transaction for the
+  session-and-preference scope, so they do not diverge.
 - Preserve the selected mode when creating a fork. A fork should inherit its source session’s mode unless an explicit product decision says otherwise; inheritance is the sensible behavior for this version.
 No V2 SessionV2.Service dependency should be introduced into the legacy session service.
 Legacy prompt-runner changes
-In packages/opencode/src/session/prompt.ts, add a dedicated system instruction based on the legacy session’s experienceMode.
+In packages/opencode/src/session/prompt.ts, add a dedicated system instruction
+based on the stored legacy session experienceMode or the transient prompt
+override when one is supplied.
 The instruction should be built from one reusable helper, for example:
 ExperienceMode.instruction(session.experienceMode)
 Insert it in the existing system-prompt assembly sequence alongside existing environment, global instructions, MCP guidance, and skills guidance.
@@ -134,18 +182,33 @@ This must regenerate:
 - any generated OpenAPI declarations used by App and TUI.
 Do not manually edit generated SDK files.
 App implementation
-Add the selector to both App composer variants:
+Add a `/skill-mode` slash command to both App composer variants:
 - classic PromptInput;
 - V2 PromptInputV2Composer.
 Behavior:
-- The control displays Beginner, Intermediate, or Expert.
+- Entering or selecting `/skill-mode` immediately opens the existing command-style
+  selector for Beginner, Intermediate, or Expert, then opens a second selector
+  with the three scope labels above.
+- Remove the `ctrl+e` binding for response-style selection; it remains
+  available to the normal input editing behavior.
 - On an existing session:
-  - call legacy PATCH /session/:sessionID with experienceMode;
+  - for “For this and future sessions,” call legacy PATCH /session/:sessionID
+    with experienceMode and `experienceModeScope: "session_and_preference"`;
+  - for “For this session only,” call legacy PATCH /session/:sessionID with
+    experienceMode and `experienceModeScope: "session"`;
+  - for “For the next prompt only,” retain a transient pending override in the
+    composer and include it in the next legacy prompt submission, then clear it
+    after that submission is admitted;
   - update the UI from the returned session/sync state;
   - show a useful error toast if persistence fails.
 - On a new-session composer:
-  - maintain the selected mode in composer state;
-  - include it in POST /session when the user submits the first prompt;
+  - offer all three scopes;
+  - for “For this and future sessions,” include the selected mode in POST
+    /session when the user submits the first prompt;
+  - for “For this session only,” create the session with its stored default,
+    then immediately apply a session-only update before submitting the prompt;
+  - for “For the next prompt only,” create the session with its stored default
+    and include the selected mode only in the first prompt submission;
   - use the server-provided default initially.
 - Preserve editor focus after a selection, consistent with model/agent controls.
 - Add accessible labels and stable data-action identifiers for tests.
@@ -156,13 +219,27 @@ Beginner — Detailed explanations for learning
 Intermediate — Balanced explanations and tradeoffs
 Expert — Concise, implementation-first responses
 The App must not infer mode solely from local storage. The server/database remains authoritative.
+
+Display the active stored mode adjacent to the model name in the prompt
+metadata, using semantic mode colors: green for Beginner, yellow for
+Intermediate, and red for Expert. A next-prompt-only override may additionally
+be indicated until submission, but it must not replace the displayed stored
+mode as if it were persistent.
 TUI implementation
-Add a compact selector to the TUI prompt footer.
+Add the `/skill-mode` slash command and its two-step selector flow to the TUI prompt
+input, using the existing command and selection/dialog patterns.
 Behavior:
-- Display the active mode next to the existing agent/model metadata.
-- Offer a keyboard-accessible picker consistent with existing TUI selection/dialog patterns.
-- On an existing session, call legacy session update with the selected mode.
-- On a new session, retain the local selection until legacy session creation and pass it as experienceMode.
+- Display the active stored mode next to the existing agent/model metadata:
+  Beginner in green, Intermediate in yellow, and Expert in red.
+- `/skill-mode` first selects the mode, then selects its scope; no `ctrl+e`
+  response-style binding is present.
+- On an existing session, use the appropriate scoped legacy session update for
+  persistent and session-only choices.
+- For a next-prompt-only choice, retain a transient override and include it in
+  the next legacy prompt submission, clearing it when the prompt is admitted.
+- On a new session, offer all three scopes: pass persistent selection as
+  experienceMode during creation, apply session-only selection after creation,
+  and include next-prompt selection only in the first prompt submission.
 - Refresh displayed state from the returned/synced legacy session.
 - Avoid storing an independent permanent TUI-only preference.
 The TUI may use a short visible label:
@@ -180,7 +257,8 @@ Includes:
 - database migration for local session_preference;
 - legacy Session.Info and Session.CreateInput changes;
 - legacy session create/get/list/fork persistence behavior;
-- legacy PATCH /session/:sessionID mode update;
+- scoped legacy PATCH /session/:sessionID mode update;
+- transient legacy prompt override input;
 - legacy OpenAPI schema updates;
 - regenerated legacy JavaScript SDK;
 - tests for persistence and API behavior.
@@ -198,13 +276,16 @@ Includes:
 - request-construction tests for Beginner, Intermediate, and Expert;
 - recorded HTTP fixture updates where request bodies now include a system message.
 Does not include UI.
-Commit 3: App and TUI selectors
+Commit 3: App and TUI slash-command selectors
 Proposed title:
-feat(app): add experience mode selectors
+feat(app): add experience mode slash selector
 Includes:
-- App classic composer selector;
-- App V2 composer selector;
-- TUI prompt-footer selector;
+- App classic-composer `/skill-mode` selector flow;
+- App V2-composer `/skill-mode` selector flow;
+- TUI `/skill-mode` selector flow;
+- scope selector and persistent, session-only, and next-prompt behavior;
+- removal of the `ctrl+e` response-style binding;
+- semantic mode colors next to prompt model metadata;
 - new-session selection state;
 - existing-session update behavior;
 - client/UI tests;
@@ -237,6 +318,7 @@ Required test cases:
 - a later creation without explicit mode inherits Beginner;
 - changing Session B to Expert leaves Session A unchanged;
 - a later Session C inherits Expert;
+- a session-only change does not alter the preference used by Session C;
 - session get/list/create/update responses expose the selected mode;
 - fork inherits its source mode;
 - invalid mode values are rejected by the legacy HTTP schema.
@@ -250,6 +332,9 @@ Required tests:
 - Intermediate system instruction is present in provider request.
 - Expert system instruction is present in provider request.
 - The instruction is not stored as a user-visible message.
+- A next-prompt-only override applies to its submitted prompt and continuation
+  turns, while the following prompt returns to the stored session mode.
+- A next-prompt-only override does not update session or preference storage.
 - Existing agent, skills, MCP, environment, structured-output, and continuation behavior remains intact.
 - Recorded transport tests pass after fixture updates.
 Commit 3
@@ -261,14 +346,20 @@ cd packages/tui
 bun typecheck
 bun test
 Required UI tests:
-- mode selector renders on both App composer variants;
-- mode selector renders in TUI prompt footer;
-- selecting mode updates an existing session through legacy API;
-- selected mode is included when creating a new session;
+- `/skill-mode` opens the mode selector on both App composer variants and TUI;
+- choosing a mode opens the scope selector with all three labels;
+- `ctrl+e` does not open the response-style selector;
+- persistent selection updates an existing session and preference through the
+  legacy API;
+- session-only selection updates only the existing session;
+- next-prompt-only selection is sent with one prompt, then cleared;
+- persistent selected mode is included when creating a new session;
+- active prompt metadata shows Beginner green, Intermediate yellow, and Expert
+  red;
 - failure preserves/reverts UI state appropriately and shows an error;
 - a different session’s displayed mode does not change.
 Explicit non-goals
-- Per-message mode override.
+- General per-message mode overrides beyond the explicit one-next-prompt flow.
 - Changes to V2 API routes or V2 generated clients.
 - Changes to V2 session persistence, events, or runner.
 - Syncing preference across machines/accounts.
