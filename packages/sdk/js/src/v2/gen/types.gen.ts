@@ -9545,6 +9545,38 @@ export type SessionStatusResponses = {
 
 export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
 
+export type SessionExperienceModePreferenceData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/preference/experience-mode"
+}
+
+export type SessionExperienceModePreferenceErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SessionExperienceModePreferenceError =
+  SessionExperienceModePreferenceErrors[keyof SessionExperienceModePreferenceErrors]
+
+export type SessionExperienceModePreferenceResponses = {
+  /**
+   * Get response style preference
+   */
+  200: {
+    experienceMode: "beginner" | "intermediate" | "expert"
+  }
+}
+
+export type SessionExperienceModePreferenceResponse =
+  SessionExperienceModePreferenceResponses[keyof SessionExperienceModePreferenceResponses]
+
 export type SessionDeleteData = {
   body?: never
   path: {
@@ -9621,6 +9653,7 @@ export type SessionUpdateData = {
     }
     permission?: PermissionRuleset
     experienceMode?: "beginner" | "intermediate" | "expert"
+    experienceModeScope?: "session" | "session_and_preference"
     time?: {
       archived?: number
     }
@@ -9810,6 +9843,7 @@ export type SessionPromptData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    experienceMode?: "beginner" | "intermediate" | "expert"
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -10157,6 +10191,7 @@ export type SessionPromptAsyncData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    experienceMode?: "beginner" | "intermediate" | "expert"
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {

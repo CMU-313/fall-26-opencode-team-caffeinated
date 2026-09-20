@@ -39,6 +39,7 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  experienceMode?: "beginner" | "intermediate" | "expert"
 }
 
 type FollowupSendInput = {
@@ -171,6 +172,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       agent: input.draft.agent,
       model: input.draft.model,
       variant: input.draft.variant,
+      experienceMode: input.draft.experienceMode,
       legacyParts: requestParts,
       text: requestParts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
       files: requestParts.flatMap((part) => {
@@ -230,6 +232,9 @@ type PromptSubmitInput = {
   onSubmit?: () => void
   model?: ModelSelection
   experienceMode?: Accessor<"beginner" | "intermediate" | "expert">
+  newSessionExperienceModeScope?: Accessor<"session" | "session_and_preference" | "next" | undefined>
+  nextPromptExperienceMode?: Accessor<"beginner" | "intermediate" | "expert" | undefined>
+  onNextPromptExperienceModeUsed?: () => void
 }
 
 export function createPromptSubmit(input: PromptSubmitInput) {
@@ -406,7 +411,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           agent: currentAgent.name,
           model: { id: currentModel.id, providerID: currentModel.provider.id, variant },
           location: { directory: sessionDirectory },
-          experienceMode: input.experienceMode?.(),
+          experienceMode:
+            input.newSessionExperienceModeScope?.() === "session_and_preference" ? input.experienceMode?.() : undefined,
         })
         .then(normalizeSessionInfo)
         .catch((err) => {
@@ -417,6 +423,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           return undefined
         })
       if (created) {
+        if (input.newSessionExperienceModeScope?.() === "session") {
+          await sdk().client.session.update({
+            sessionID: created.id,
+            directory: sessionDirectory,
+            experienceMode: input.experienceMode?.(),
+            experienceModeScope: "session",
+          })
+        }
         seed(sessionDirectory, created)
         session = created
         await startTransition(() => {
@@ -456,6 +470,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
+      experienceMode: input.nextPromptExperienceMode?.(),
     }
 
     const clearInput = () => {
@@ -638,6 +653,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       removeOptimisticMessage()
       if (restoreInput()) restoreCommentItems(submission.target(), commentItems)
     })
+    input.onNextPromptExperienceModeUsed?.()
   }
 
   return {

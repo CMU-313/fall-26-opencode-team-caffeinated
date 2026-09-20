@@ -4,12 +4,12 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { Select } from "@opencode-ai/ui/select"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
 import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
+import { DialogSelectExperienceMode } from "@/components/dialog-select-experience-mode"
 import type { PromptInputProps } from "@/components/prompt-input/contracts"
 import { normalizePromptHistoryEntry, promptLength, type PromptHistoryComment } from "@/components/prompt-input/history"
 import { createPersistedPromptInputHistory } from "@/components/prompt-input/history-store"
@@ -45,7 +45,7 @@ export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
   readonly experienceMode: {
     current: () => "beginner" | "intermediate" | "expert"
-    select: (value: "beginner" | "intermediate" | "expert") => Promise<void>
+    choose: () => void
   }
 }
 
@@ -79,17 +79,6 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
           />
         }
       />
-      <div class="flex items-center">
-        <Select
-          size="normal"
-          options={["beginner", "intermediate", "expert"]}
-          current={props.controller.experienceMode.current()}
-          label={(value) => language.t(("prompt.experienceMode." + value) as Parameters<typeof language.t>[0])}
-          onSelect={(value) => void props.controller.experienceMode.select(value as "beginner" | "intermediate" | "expert")}
-          triggerProps={{ "data-action": "prompt-experience-mode", "aria-label": language.t("prompt.experienceMode.label") }}
-          variant="ghost"
-        />
-      </div>
     </div>
   )
 }
@@ -129,10 +118,19 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   })
   const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
   const [experienceMode, setExperienceMode] = createSignal<"beginner" | "intermediate" | "expert">("intermediate")
+  const [nextPromptExperienceMode, setNextPromptExperienceMode] = createSignal<
+    "beginner" | "intermediate" | "expert" | undefined
+  >()
+  const [newSessionExperienceModeScope, setNewSessionExperienceModeScope] = createSignal<
+    "session" | "session_and_preference" | "next" | undefined
+  >()
   createEffect(on(() => info()?.experienceMode, (value) => {
     if (value) setExperienceMode(value)
   }))
-  const selectExperienceMode = async (value: "beginner" | "intermediate" | "expert") => {
+  const selectExperienceMode = async (
+    value: "beginner" | "intermediate" | "expert",
+    scope: "session" | "session_and_preference",
+  ) => {
     const previous = experienceMode()
     setExperienceMode(value)
     const sessionID = props.controls.session.id
@@ -145,12 +143,38 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         sessionID,
         directory: info()?.directory ?? sdk().directory,
         experienceMode: value,
+        ...(scope === "session" ? { experienceModeScope: scope } : {}),
       })
     } catch (error) {
       setExperienceMode(previous)
       showToast({ title: language.t("prompt.toast.experienceModeUpdateFailed.title"), description: String(error) })
     }
     controller.restoreFocus()
+  }
+  const chooseExperienceMode = () => {
+    void dialog.show(() => (
+      <DialogSelectExperienceMode
+        session={Boolean(props.controls.session.id)}
+        onSelect={(mode, scope) => {
+          if (!props.controls.session.id) {
+            setExperienceMode(mode)
+            setNewSessionExperienceModeScope(scope)
+            setNextPromptExperienceMode(scope === "next" ? mode : undefined)
+            dialog.close()
+            controller.restoreFocus()
+            return
+          }
+          if (scope === "next") {
+            setNextPromptExperienceMode(mode)
+            dialog.close()
+            controller.restoreFocus()
+            return
+          }
+          void selectExperienceMode(mode, scope)
+          dialog.close()
+        }}
+      />
+    ))
   }
   const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
   const attachments = createMemo(() =>
@@ -260,6 +284,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     onSubmit: props.onSubmit,
     model: props.controls.model.selection,
     experienceMode,
+    newSessionExperienceModeScope,
+    nextPromptExperienceMode,
+    onNextPromptExperienceModeUsed: () => setNextPromptExperienceMode(undefined),
   })
 
   const referenceDescription = (reference: ReferenceInfo) =>
@@ -476,6 +503,15 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       disabled: controller.state.mode === "normal",
       onSelect: () => controller.dispatch({ type: "mode.normal" }),
     },
+    {
+      id: "prompt.style",
+      title: "Response style",
+      description: "Choose how detailed responses should be",
+      category: language.t("command.category.session"),
+      slash: "skill-mode",
+      disabled: controller.state.mode !== "normal",
+      onSelect: chooseExperienceMode,
+    },
   ])
 
   createEffect(
@@ -507,7 +543,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   )
 
   return Object.assign(controller, {
-    experienceMode: { current: experienceMode, select: selectExperienceMode },
+    experienceMode: { current: experienceMode, choose: chooseExperienceMode },
   }) as PromptInputV2ComposerController
 }
 

@@ -224,6 +224,7 @@ const Model = Schema.Struct({
 
 export const Metadata = Schema.Record(Schema.String, Schema.Any)
 export { ExperienceMode }
+export const ExperienceModeScope = Schema.Union([Schema.Literal("session"), Schema.Literal("session_and_preference")])
 
 export const Info = Schema.Struct({
   id: SessionID,
@@ -431,6 +432,7 @@ export interface Interface {
     workspaceID?: WorkspaceV2.ID
     experienceMode?: ExperienceMode
   }) => Effect.Effect<Info>
+  readonly getExperienceModePreference: () => Effect.Effect<ExperienceMode>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
@@ -453,7 +455,11 @@ export interface Interface {
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
   readonly setShare: (input: { sessionID: SessionID; share: Info["share"] }) => Effect.Effect<void>
   readonly setWorkspace: (input: { sessionID: SessionID; workspaceID: Info["workspaceID"] }) => Effect.Effect<void>
-  readonly setExperienceMode: (input: { sessionID: SessionID; experienceMode: ExperienceMode }) => Effect.Effect<void>
+  readonly setExperienceMode: (input: {
+    sessionID: SessionID
+    experienceMode: ExperienceMode
+    scope?: Schema.Schema.Type<typeof ExperienceModeScope>
+  }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
@@ -676,6 +682,15 @@ const layer: Layer.Layer<
       } as SessionV1.Part
     })
 
+    const getExperienceModePreference = Effect.fn("Session.getExperienceModePreference")(function* () {
+      return (yield* db
+        .select()
+        .from(SessionPreferenceTable)
+        .where(eq(SessionPreferenceTable.id, 1))
+        .get()
+        .pipe(Effect.orDie))?.experience_mode ?? "intermediate"
+    })
+
     const create = Effect.fn("Session.create")(function* (input?: {
       parentID?: SessionID
       title?: string
@@ -688,9 +703,7 @@ const layer: Layer.Layer<
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
-      const preference = input?.experienceMode ??
-        (yield* db.select().from(SessionPreferenceTable).where(eq(SessionPreferenceTable.id, 1)).get().pipe(Effect.orDie))
-          ?.experience_mode ?? "intermediate"
+      const preference = input?.experienceMode ?? (yield* getExperienceModePreference())
       if (input?.experienceMode !== undefined) {
         yield* db
           .insert(SessionPreferenceTable)
@@ -843,9 +856,11 @@ const layer: Layer.Layer<
     const setExperienceMode = Effect.fn("Session.setExperienceMode")(function* (input: {
       sessionID: SessionID
       experienceMode: ExperienceMode
+      scope?: Schema.Schema.Type<typeof ExperienceModeScope>
     }) {
       const current = yield* get(input.sessionID).pipe(Effect.orDie)
       const time = Date.now()
+      const scope = input.scope ?? "session_and_preference"
       yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
@@ -854,14 +869,16 @@ const layer: Layer.Layer<
               .set({ experience_mode: input.experienceMode, time_updated: time })
               .where(eq(SessionTable.id, input.sessionID))
               .run()
-            yield* tx
-              .insert(SessionPreferenceTable)
-              .values({ id: 1, experience_mode: input.experienceMode, time_updated: time })
-              .onConflictDoUpdate({
-                target: SessionPreferenceTable.id,
-                set: { experience_mode: input.experienceMode, time_updated: time },
-              })
-              .run()
+            if (scope === "session_and_preference") {
+              yield* tx
+                .insert(SessionPreferenceTable)
+                .values({ id: 1, experience_mode: input.experienceMode, time_updated: time })
+                .onConflictDoUpdate({
+                  target: SessionPreferenceTable.id,
+                  set: { experience_mode: input.experienceMode, time_updated: time },
+                })
+                .run()
+            }
           }),
         )
         .pipe(Effect.orDie)
@@ -967,6 +984,7 @@ const layer: Layer.Layer<
       list,
       listGlobal,
       create,
+      getExperienceModePreference,
       fork,
       touch,
       get,

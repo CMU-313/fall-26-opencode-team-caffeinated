@@ -189,6 +189,8 @@ import type {
   SessionDeleteResponses,
   SessionDiffErrors,
   SessionDiffResponses,
+  SessionExperienceModePreferenceErrors,
+  SessionExperienceModePreferenceResponses,
   SessionForkErrors,
   SessionForkResponses,
   SessionGetErrors,
@@ -3490,6 +3492,40 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * Get response style preference
+   *
+   * Retrieve the default response style used for new sessions.
+   */
+  public experienceModePreference<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionExperienceModePreferenceResponses,
+      SessionExperienceModePreferenceErrors,
+      ThrowOnError
+    >({
+      url: "/preference/experience-mode",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Delete session
    *
    * Delete a session and permanently remove all associated data, including messages and history.
@@ -3569,6 +3605,7 @@ export class Session2 extends HeyApiClient {
       }
       permission?: PermissionRuleset
       experienceMode?: "beginner" | "intermediate" | "expert"
+      experienceModeScope?: "session" | "session_and_preference"
       time?: {
         archived?: number
       }
@@ -3587,6 +3624,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "metadata" },
             { in: "body", key: "permission" },
             { in: "body", key: "experienceMode" },
+            { in: "body", key: "experienceModeScope" },
             { in: "body", key: "time" },
           ],
         },
@@ -3761,6 +3799,7 @@ export class Session2 extends HeyApiClient {
       format?: OutputFormat
       system?: string
       variant?: string
+      experienceMode?: "beginner" | "intermediate" | "expert"
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -3781,6 +3820,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "format" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
+            { in: "body", key: "experienceMode" },
             { in: "body", key: "parts" },
           ],
         },
@@ -4114,6 +4154,7 @@ export class Session2 extends HeyApiClient {
       format?: OutputFormat
       system?: string
       variant?: string
+      experienceMode?: "beginner" | "intermediate" | "expert"
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -4134,6 +4175,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "format" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
+            { in: "body", key: "experienceMode" },
             { in: "body", key: "parts" },
           ],
         },

@@ -44,6 +44,7 @@ type LegacyPrompt = {
   agent?: string
   model?: { providerID: string; modelID: string }
   variant?: string
+  experienceMode?: "beginner" | "intermediate" | "expert"
   legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
 }
 type LegacyLocation = { directory?: string }
@@ -91,8 +92,7 @@ export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
     session: {
       ...input.current.session,
       create(value?: Parameters<CompatibleSessionApi["create"]>[0]) {
-        const { experienceMode: _, ...rest } = value ?? {}
-        return input.current.session.create(rest)
+        return input.current.session.create(value)
       },
     },
   }

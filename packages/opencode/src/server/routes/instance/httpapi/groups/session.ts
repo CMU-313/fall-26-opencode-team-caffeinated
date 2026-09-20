@@ -46,11 +46,13 @@ export const MessagesQuery = Schema.Struct({
   before: Schema.optional(Schema.String),
 })
 export const StatusMap = Schema.Record(Schema.String, SessionStatus.Info)
+export const ExperienceModePreference = Schema.Struct({ experienceMode: Session.ExperienceMode })
 export const UpdatePayload = Schema.Struct({
   title: Schema.optional(Schema.String),
   metadata: Schema.optional(Session.Metadata),
   permission: Schema.optional(PermissionV1.Ruleset),
   experienceMode: Schema.optional(Session.ExperienceMode),
+  experienceModeScope: Schema.optional(Session.ExperienceModeScope),
   time: Schema.optional(
     Schema.Struct({
       archived: Schema.optional(Session.ArchivedTimestamp),
@@ -79,6 +81,7 @@ export const PermissionResponsePayload = Schema.Struct({
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
+  experienceModePreference: "/preference/experience-mode",
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
@@ -128,6 +131,17 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.status",
             summary: "Get session status",
             description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
+          }),
+        ),
+        HttpApiEndpoint.get("experienceModePreference", SessionPaths.experienceModePreference, {
+          query: WorkspaceRoutingQuery,
+          success: described(ExperienceModePreference, "Get response style preference"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.experienceModePreference",
+            summary: "Get response style preference",
+            description: "Retrieve the default response style used for new sessions.",
           }),
         ),
         HttpApiEndpoint.get("get", SessionPaths.get, {

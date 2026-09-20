@@ -1068,7 +1068,7 @@ const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
+      return yield* loop({ sessionID: input.sessionID, experienceMode: input.experienceMode })
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1079,8 +1079,8 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
-      function* (sessionID: SessionID) {
+    const runLoop: (sessionID: SessionID, experienceMode?: Session.ExperienceMode) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
+      function* (sessionID: SessionID, experienceMode?: Session.ExperienceMode) {
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
@@ -1265,7 +1265,7 @@ const layer = Layer.effect(
             const system = [
               ...env,
               ...instructions,
-              ExperienceMode.instruction(session.experienceMode),
+              ExperienceMode.instruction(experienceMode ?? session.experienceMode),
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
             ]
@@ -1345,7 +1345,7 @@ const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID, input.experienceMode))
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
@@ -1511,6 +1511,7 @@ export const PromptInput = Schema.Struct({
   format: Schema.optional(SessionV1.Format),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
+  experienceMode: Schema.optional(Session.ExperienceMode),
   parts: Schema.Array(
     Schema.Union([
       SessionV1.TextPartInput,
@@ -1524,6 +1525,7 @@ export type PromptInput = Schema.Schema.Type<typeof PromptInput>
 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
+  experienceMode: Schema.optional(Session.ExperienceMode),
 }) {}
 
 export const ShellInput = Schema.Struct({

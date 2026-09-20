@@ -27,6 +27,7 @@ import {
   DiffQuery,
   ForkPayload,
   InitPayload,
+  ExperienceModePreference,
   ListQuery,
   MessagesQuery,
   PermissionResponsePayload,
@@ -76,6 +77,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const status = Effect.fn("SessionHttpApi.status")(function* () {
       return Object.fromEntries(yield* statusSvc.list())
+    })
+
+    const experienceModePreference = Effect.fn("SessionHttpApi.experienceModePreference")(function* () {
+      return { experienceMode: yield* session.getExperienceModePreference() } satisfies typeof ExperienceModePreference.Type
     })
 
     const requireSession = Effect.fn("SessionHttpApi.requireSession")(function* (sessionID: SessionID) {
@@ -198,7 +203,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         })
       }
       if (ctx.payload.experienceMode !== undefined) {
-        yield* session.setExperienceMode({ sessionID: ctx.params.sessionID, experienceMode: ctx.payload.experienceMode })
+        yield* session.setExperienceMode({
+          sessionID: ctx.params.sessionID,
+          experienceMode: ctx.payload.experienceMode,
+          scope: ctx.payload.experienceModeScope,
+        })
       }
       if (ctx.payload.time?.archived !== undefined) {
         yield* session.setArchived({ sessionID: ctx.params.sessionID, time: ctx.payload.time.archived })
@@ -416,6 +425,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     return handlers
       .handle("list", list)
       .handle("status", status)
+      .handle("experienceModePreference", experienceModePreference)
       .handle("get", get)
       .handle("children", children)
       .handle("todo", todo)
