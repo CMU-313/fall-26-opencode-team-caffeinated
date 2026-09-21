@@ -6,7 +6,7 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
-import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onMount, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import { DialogSelectExperienceMode } from "@/components/dialog-select-experience-mode"
@@ -63,6 +63,19 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
+        experienceModeControl={
+          <TooltipV2 placement="top" gutter={4} value="Response style">
+            <ButtonV2
+              variant="ghost-muted"
+              size="normal"
+              class="capitalize ![font-weight:440]"
+              style={{ height: "28px" }}
+              onClick={props.controller.experienceMode.choose}
+            >
+              {props.controller.experienceMode.current()}
+            </ButtonV2>
+          </TooltipV2>
+        }
         modelControl={
           <PromptInputV2ModelControl
             loading={props.controller.model.loading}
@@ -127,6 +140,12 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   createEffect(on(() => info()?.experienceMode, (value) => {
     if (value) setExperienceMode(value)
   }))
+  onMount(() => {
+    if (props.controls.session.id) return
+    void sdk().client.session.experienceModePreference({ directory: sdk().directory }).then((result) => {
+      if (!result.error) setExperienceMode(result.data.experienceMode)
+    })
+  })
   const selectExperienceMode = async (
     value: "beginner" | "intermediate" | "expert",
     scope: "session" | "session_and_preference",
@@ -358,6 +377,13 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     })),
   ])
   const slashCommands = createMemo(() => [
+    {
+      id: "prompt.style",
+      trigger: "skill-mode",
+      title: "Response style",
+      description: "Choose how detailed responses should be",
+      type: "builtin" as const,
+    },
     ...sync().data.command.map((item) => ({
       id: `custom.${item.name}`,
       trigger: item.name,
@@ -366,7 +392,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       type: "custom" as const,
     })),
     ...command.options
-      .filter((item) => !item.disabled && !item.id.startsWith("suggested.") && item.slash)
+      .filter((item) => !item.disabled && !item.id.startsWith("suggested.") && item.slash && item.id !== "prompt.style")
       .map((item) => ({
         id: item.id,
         trigger: item.slash!,
@@ -428,6 +454,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       if (item.kind !== "command") return
       const selected = slashCommands().find((entry) => entry.id === item.id)
       if (!selected || selected.type === "custom") return
+      if (selected.id === "prompt.style") return () => chooseExperienceMode()
       return () => command.trigger(selected.id, "slash")
     },
     attachments: {

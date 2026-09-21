@@ -38,7 +38,10 @@ export function DialogSelectExperienceMode(props: {
         <For each={modes}>
           {(mode) => (
             <Button class="justify-start" onClick={() => chooseScope(mode.value)}>
-              <span class="flex flex-col items-start"><span>{mode.title}</span><span class="text-text-weak">{mode.description}</span></span>
+              <span class="flex items-center gap-2">
+                <span>{mode.title}</span>
+                <span class="text-text-weak">{mode.description}</span>
+              </span>
             </Button>
           )}
         </For>

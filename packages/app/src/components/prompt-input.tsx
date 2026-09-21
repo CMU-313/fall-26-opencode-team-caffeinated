@@ -9,6 +9,7 @@ import {
   createMemo,
   createSignal,
   createResource,
+  onMount,
   Switch,
   Match,
   type JSX,
@@ -263,6 +264,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   createEffect(on(() => info()?.experienceMode, (value) => {
     if (value) setExperienceMode(value)
   }))
+  onMount(() => {
+    if (props.controls.session.id) return
+    void sdk().client.session.experienceModePreference({ directory: sdk().directory }).then((result) => {
+      if (!result.error) setExperienceMode(result.data.experienceMode)
+    })
+  })
   const selectExperienceMode = async (
     value: "beginner" | "intermediate" | "expert",
     scope: "session" | "session_and_preference",
@@ -762,7 +769,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const builtin = command.options
-      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
+      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash && opt.id !== "prompt.style")
       .map((opt) => ({
         id: opt.id,
         trigger: opt.slash!,
@@ -781,11 +788,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       // source: cmd.source,
     }))
 
-    return [...custom, ...builtin]
+    return [
+      {
+        id: "prompt.style",
+        trigger: "skill-mode",
+        title: "Response style",
+        description: "Choose how detailed responses should be",
+        type: "builtin" as const,
+      },
+      ...custom,
+      ...builtin,
+    ]
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
+    if (cmd.id === "prompt.style") {
+      closePopover()
+      chooseExperienceMode()
+      return
+    }
     const menu = store.slashMenu
     closePopover()
     const images = imageAttachments()
@@ -1746,6 +1768,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       />
                     </TooltipKeybind>
                   </div>
+                </Show>
+                <Show when={store.mode !== "shell"}>
+                  <Tooltip placement="top" gutter={4} value="Response style">
+                    <Button
+                      variant="ghost"
+                      size="normal"
+                      class="capitalize text-13-regular text-text-base"
+                      style={control()}
+                      onClick={chooseExperienceMode}
+                    >
+                      {experienceMode()}
+                    </Button>
+                  </Tooltip>
                 </Show>
                 <Show when={!providersLoading()}>
                   <Show when={store.mode !== "shell"}>
