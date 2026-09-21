@@ -20,6 +20,7 @@ type CommandEntry =
   | (PanelEntry & { action: "subagent" })
   | (PanelEntry & { action: "variant.cycle" })
   | (PanelEntry & { action: "variant.list" })
+  | (PanelEntry & { action: "experience-mode" })
   | (PanelEntry & { action: "slash"; name: string })
   | (PanelEntry & { action: "exit" })
 
@@ -346,6 +347,8 @@ export function RunCommandMenuBody(props: {
   onQueued: () => void
   onVariant: () => void
   onVariantCycle: () => void
+  experienceMode: Accessor<"beginner" | "intermediate" | "expert">
+  onExperienceMode: () => void
   onCommand: (name: string) => void
   onNew: () => void
   onExit: () => void
@@ -403,6 +406,13 @@ export function RunCommandMenuBody(props: {
           ]
         : []
     const agent: CommandEntry[] = [
+      {
+        action: "experience-mode",
+        category: "Agent",
+        display: "Response style",
+        footer: props.experienceMode(),
+        keywords: "response style skill mode beginner intermediate expert",
+      },
       {
         action: "model",
         category: "Agent",
@@ -501,6 +511,11 @@ export function RunCommandMenuBody(props: {
 
     if (item.action === "variant.list") {
       props.onVariant()
+      return
+    }
+
+    if (item.action === "experience-mode") {
+      props.onExperienceMode()
       return
     }
 
@@ -943,6 +958,49 @@ export function RunVariantSelectBody(props: {
         grouped={false}
         background
       />
+    </PanelShell>
+  )
+}
+
+export function RunExperienceModeSelectBody(props: {
+  theme: Accessor<RunFooterTheme>
+  title: string
+  current?: Accessor<"beginner" | "intermediate" | "expert">
+  scope?: boolean
+  onClose: () => void
+  onSelect: (value: "beginner" | "intermediate" | "expert" | "session_and_preference" | "session" | "next") => void
+}) {
+  const entries = createMemo(() =>
+    props.scope
+      ? [
+          { category: "", display: "For this and future sessions", description: "Make this your default response style", keywords: "future default", value: "session_and_preference" as const },
+          { category: "", display: "For this session only", description: "Use this style until the session ends", keywords: "session", value: "session" as const },
+          { category: "", display: "For the next prompt only", description: "Use this style once", keywords: "next prompt", value: "next" as const },
+        ]
+      : [
+          { category: "", display: "Beginner", description: "Detailed explanations for learning", keywords: "beginner", value: "beginner" as const },
+          { category: "", display: "Intermediate", description: "Balanced explanations and tradeoffs", keywords: "intermediate", value: "intermediate" as const },
+          { category: "", display: "Expert", description: "Concise, implementation-first responses", keywords: "expert", value: "expert" as const },
+        ],
+  )
+  const menu = createFooterMenuState({ count: () => entries().length, limit: PANEL_LIST_ROWS })
+  useKeyboard((event) => {
+    if (event.defaultPrevented) return
+    handleKey({
+      event,
+      menu,
+      field: () => undefined,
+      setQuery: () => {},
+      select: () => {
+        const item = entries()[menu.selected()]
+        if (item) props.onSelect(item.value)
+      },
+      close: props.onClose,
+    })
+  })
+  return (
+    <PanelShell title={props.title} query="" count={entries().length} total={entries().length} placeholder="Search" theme={props.theme} inputRef={() => {}} onQuery={() => {}} countVisible={false} dark chrome="minimal">
+      <RunFooterMenu theme={props.theme} items={entries} selected={menu.selected} offset={menu.offset} rows={() => PANEL_LIST_ROWS} limit={PANEL_LIST_ROWS} border={false} paddingLeft={PANEL_PAD} paddingRight={PANEL_PAD} grouped={false} background />
     </PanelShell>
   )
 }
