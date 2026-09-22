@@ -298,6 +298,38 @@ describe("session HttpApi", () => {
   }
 
   it.instance(
+    "returns the response style preference used for new sessions",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const created = yield* requestJson<Session.Info>(SessionPaths.create, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ experienceMode: "beginner" }),
+        })
+        expect(
+          yield* requestJson<{ experienceMode: (typeof experienceModes)[number] }>(
+            SessionPaths.experienceModePreference,
+            { headers },
+          ),
+        ).toEqual({ experienceMode: "beginner" })
+        yield* requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: created.id }), {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ experienceMode: "expert", experienceModeScope: "session_and_preference" }),
+        })
+        expect(
+          yield* requestJson<{ experienceMode: (typeof experienceModes)[number] }>(
+            SessionPaths.experienceModePreference,
+            { headers },
+          ),
+        ).toEqual({ experienceMode: "expert" })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "defaults new sessions to Intermediate and exposes the mode on create, get, list, update, and fork responses",
     () =>
       Effect.gen(function* () {

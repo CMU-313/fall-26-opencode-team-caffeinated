@@ -75,6 +75,7 @@ import {
   type PromptInputSubmission,
 } from "./prompt-input/contracts"
 import { createPromptSubmit } from "./prompt-input/submit"
+import { loadExperienceModePreference } from "./prompt-input/experience-mode"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -266,9 +267,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }))
   onMount(() => {
     if (props.controls.session.id) return
-    void sdk().client.session.experienceModePreference({ directory: sdk().directory }).then((result) => {
-      if (!result.error) setExperienceMode(result.data.experienceMode)
-    })
+    void loadExperienceModePreference(() => sdk().client.session.experienceModePreference({ directory: sdk().directory })).then(
+      (mode) => {
+        if (mode) setExperienceMode(mode)
+      },
+    )
   })
   const selectExperienceMode = async (
     value: "beginner" | "intermediate" | "expert",

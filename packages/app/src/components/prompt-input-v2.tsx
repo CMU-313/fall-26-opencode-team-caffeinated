@@ -15,6 +15,7 @@ import { normalizePromptHistoryEntry, promptLength, type PromptHistoryComment } 
 import { createPersistedPromptInputHistory } from "@/components/prompt-input/history-store"
 import { promptDesignPlaceholder, promptPlaceholder } from "@/components/prompt-input/placeholder"
 import { createPromptSubmit } from "@/components/prompt-input/submit"
+import { loadExperienceModePreference } from "@/components/prompt-input/experience-mode"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
@@ -142,9 +143,11 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   }))
   onMount(() => {
     if (props.controls.session.id) return
-    void sdk().client.session.experienceModePreference({ directory: sdk().directory }).then((result) => {
-      if (!result.error) setExperienceMode(result.data.experienceMode)
-    })
+    void loadExperienceModePreference(() => sdk().client.session.experienceModePreference({ directory: sdk().directory })).then(
+      (mode) => {
+        if (mode) setExperienceMode(mode)
+      },
+    )
   })
   const selectExperienceMode = async (
     value: "beginner" | "intermediate" | "expert",
