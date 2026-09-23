@@ -747,6 +747,8 @@ export function RunFooterView(props: RunFooterViewProps) {
                               props.onCycle()
                               closePanel()
                             }}
+                            experienceMode={props.experienceMode}
+                            onExperienceMode={openExperienceMode}
                             onCommand={(name) => {
                               composer.submitText(`/${name}`)
                               closePanel()
