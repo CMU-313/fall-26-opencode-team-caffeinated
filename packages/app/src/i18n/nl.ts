@@ -378,6 +378,11 @@ export const dict = {
   "prompt.attachment.remove": "Bijlage verwijderen",
   "prompt.action.send": "Verzenden",
   "prompt.action.stop": "Stop",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
   "prompt.toast.pasteUnsupported.title": "Niet-ondersteunde bijlage",
   "prompt.toast.pasteUnsupported.description":
     "Hier kunnen alleen afbeeldingen, pdf's of tekstbestanden worden bijgevoegd.",

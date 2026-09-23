@@ -395,6 +395,11 @@ export const dict = {
   "prompt.attachment.remove": "Fjern vedlegg",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stopp",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
 
   "prompt.toast.pasteUnsupported.title": "Ikke støttet vedlegg",
   "prompt.toast.attachmentDuplicate.title": "Denne filen er allerede lastet opp",

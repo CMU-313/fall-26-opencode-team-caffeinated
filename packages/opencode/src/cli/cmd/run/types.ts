@@ -40,6 +40,7 @@ export type RunPrompt = {
     name: string
     arguments: string
   }
+  experienceMode?: "beginner" | "intermediate" | "expert"
 }
 
 export type FooterQueuedPrompt = {
@@ -184,6 +185,8 @@ export type FooterPromptRoute =
   | { type: "skill" }
   | { type: "model" }
   | { type: "variant" }
+  | { type: "experience-mode" }
+  | { type: "experience-mode-scope" }
 
 export type FooterSubagentTab = {
   sessionID: string

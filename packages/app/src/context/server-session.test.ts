@@ -14,6 +14,7 @@ const session = (id: string, parentID?: string): Session => ({
   directory: "/repo",
   title: id,
   version: "1",
+  experienceMode: "intermediate",
   parentID,
   time: { created: 1, updated: 1 },
 })

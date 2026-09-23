@@ -405,6 +405,11 @@ export const dict = {
   "prompt.attachment.remove": "Ukloni prilog",
   "prompt.action.send": "Pošalji",
   "prompt.action.stop": "Zaustavi",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
 
   "prompt.toast.pasteUnsupported.title": "Nepodržan prilog",
   "prompt.toast.attachmentDuplicate.title": "Ova datoteka je već učitana",

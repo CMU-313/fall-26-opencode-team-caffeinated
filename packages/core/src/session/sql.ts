@@ -14,6 +14,7 @@ import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 import type { Revert } from "@opencode-ai/schema/revert"
+import type { ExperienceMode } from "@opencode-ai/schema/experience-mode"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
@@ -54,6 +55,7 @@ export const SessionTable = sqliteTable(
       providerID: string
       variant?: string
     }>(),
+    experience_mode: text().$type<ExperienceMode>().notNull().default("intermediate"),
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
@@ -64,6 +66,12 @@ export const SessionTable = sqliteTable(
     index("session_parent_idx").on(table.parent_id),
   ],
 )
+
+export const SessionPreferenceTable = sqliteTable("session_preference", {
+  id: integer().primaryKey(),
+  experience_mode: text().$type<ExperienceMode>().notNull().default("intermediate"),
+  time_updated: integer().notNull(),
+})
 
 export const MessageTable = sqliteTable(
   "message",

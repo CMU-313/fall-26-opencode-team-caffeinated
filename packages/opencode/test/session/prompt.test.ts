@@ -554,6 +554,150 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
+const experienceModes = [
+  {
+    mode: "beginner" as const,
+    instruction: ["new to software engineering", "meaningful code sections", "design decisions"],
+  },
+  {
+    mode: "intermediate" as const,
+    instruction: ["basic software-engineering knowledge", "design choices", "options and tradeoffs"],
+  },
+  {
+    mode: "expert" as const,
+    instruction: ["concise and implementation-first", "design decisions", "ask the developer instead of choosing speculatively"],
+  },
+]
+
+experienceModes.forEach(({ mode, instruction }) =>
+  it.instance("loop includes " + mode + " experience instructions in the provider request", () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        experienceMode: mode,
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* llm.hang
+      yield* user(chat.id, "hello")
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for experience-mode request", "10 seconds")
+
+      const hits = yield* llm.hits
+      const providerRequest = JSON.stringify(hits[0]?.body).toLowerCase()
+      const storedMessages = JSON.stringify(yield* sessions.messages({ sessionID: chat.id })).toLowerCase()
+      instruction.forEach((expected) => expect(providerRequest).toContain(expected))
+      instruction.forEach((expected) => expect(storedMessages).not.toContain(expected))
+      yield* Fiber.interrupt(fiber)
+    }),
+  ),
+)
+
+it.instance("loop applies a transient experience mode without persisting it", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      experienceMode: "intermediate",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* llm.hang
+    yield* user(chat.id, "hello")
+
+    const fiber = yield* prompt.loop({ sessionID: chat.id, experienceMode: "expert" }).pipe(Effect.forkChild)
+    yield* awaitWithTimeout(llm.wait(1), "timed out waiting for transient experience-mode request", "10 seconds")
+
+    const hits = yield* llm.hits
+    expect(JSON.stringify(hits[0]?.body).toLowerCase()).toContain("concise and implementation-first")
+    expect((yield* sessions.get(chat.id)).experienceMode).toBe("intermediate")
+    yield* Fiber.interrupt(fiber)
+  }),
+)
+
+experienceModes.forEach(({ mode, instruction }) =>
+  it.instance(`uses ${mode} for one prompt only, then returns to the stored mode`, () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        experienceMode: "intermediate",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* llm.text("first response")
+      yield* user(chat.id, "first prompt")
+      yield* prompt.loop({ sessionID: chat.id, experienceMode: mode })
+
+      const firstRequest = JSON.stringify((yield* llm.hits)[0]?.body)
+      const transientInstruction = instruction[0]
+      expect(firstRequest.toLowerCase()).toContain(transientInstruction)
+      expect((yield* sessions.get(chat.id)).experienceMode).toBe("intermediate")
+      expect(JSON.stringify(yield* sessions.messages({ sessionID: chat.id })).toLowerCase()).not.toContain(
+        transientInstruction,
+      )
+
+      yield* llm.text("second response")
+      yield* user(chat.id, "second prompt")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const hits = yield* llm.hits
+      expect(hits).toHaveLength(2)
+      expect(JSON.stringify(hits[1]?.body).toLowerCase()).toContain("basic software-engineering knowledge")
+      expect((yield* sessions.get(chat.id)).experienceMode).toBe("intermediate")
+    }),
+  ),
+)
+
+it.instance("keeps an Expert next-prompt override through tool continuations, then restores Beginner", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      experienceMode: "beginner",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* llm.tool("first", { value: "first" })
+    yield* llm.text("expert response")
+    yield* user(chat.id, "first prompt")
+    yield* prompt.loop({ sessionID: chat.id, experienceMode: "expert" })
+
+    const expertRequests = yield* llm.hits
+    expect(expertRequests).toHaveLength(2)
+    expertRequests.forEach((request) => {
+      const system = JSON.stringify(request.body).toLowerCase()
+      expect(system).toContain("concise and implementation-first")
+      expect(system).toContain("ask the developer instead of choosing speculatively")
+    })
+    expect((yield* sessions.get(chat.id)).experienceMode).toBe("beginner")
+    expect(yield* sessions.getExperienceModePreference()).toBe("beginner")
+
+    yield* llm.text("beginner response")
+    yield* user(chat.id, "second prompt")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const requests = yield* llm.hits
+    expect(requests).toHaveLength(3)
+    const beginnerSystem = JSON.stringify(requests[2]?.body).toLowerCase()
+    expect(beginnerSystem).toContain("new to software engineering")
+    expect(beginnerSystem).toContain("explain concepts thoroughly")
+    expect(beginnerSystem).toContain("meaningful code sections")
+    expect((yield* sessions.get(chat.id)).experienceMode).toBe("beginner")
+    expect(yield* sessions.getExperienceModePreference()).toBe("beginner")
+    const storedMessages = JSON.stringify(yield* sessions.messages({ sessionID: chat.id })).toLowerCase()
+    expect(storedMessages).not.toContain("concise and implementation-first")
+  }),
+)
+
 withMcpInstructions.instance(
   "loop includes MCP instructions in model system context",
   () =>

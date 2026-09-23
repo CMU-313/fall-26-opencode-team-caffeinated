@@ -11,6 +11,7 @@ import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
   RunModelSelectBody,
+  RunExperienceModeSelectBody,
   RunQueuedPromptSelectBody,
   RunSkillSelectBody,
   RunSubagentSelectBody,
@@ -211,6 +212,8 @@ async function renderFooter(
           onExit={() => {}}
           onModelSelect={() => {}}
           onVariantSelect={() => {}}
+          experienceMode={() => "intermediate"}
+          onExperienceMode={() => {}}
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
@@ -383,6 +386,8 @@ test("direct command panel renders grouped command palette", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          experienceMode={() => "intermediate"}
+          onExperienceMode={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
           onExit={() => {}}
@@ -524,6 +529,8 @@ test("direct command panel shows subagent entry when available", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          experienceMode={() => "intermediate"}
+          onExperienceMode={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
           onExit={() => {}}
@@ -541,6 +548,7 @@ test("direct command panel shows subagent entry when available", async () => {
     const frame = app.captureCharFrame()
 
     expect(frame).toContain("View subagents")
+    expect(frame).toContain("Response style")
     expect(frame).toContain("1 active")
   } finally {
     app.renderer.destroy()
@@ -572,6 +580,8 @@ test("direct command panel keeps completed subagents available", async () => {
           onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
+          experienceMode={() => "intermediate"}
+          onExperienceMode={() => {}}
           onCommand={() => {}}
           onNew={() => {}}
           onExit={() => {}}
@@ -1000,6 +1010,8 @@ test("direct footer shows editable prompts and additional queued work while runn
           onExit={() => {}}
           onModelSelect={() => {}}
           onVariantSelect={() => {}}
+          experienceMode={() => "intermediate"}
+          onExperienceMode={() => {}}
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
@@ -1011,12 +1023,12 @@ test("direct footer shows editable prompts and additional queued work while runn
 
   const app = await testRender(
     () => (
-      <box width={160} height={8}>
+      <box width={180} height={8}>
         <Harness />
       </box>
     ),
     {
-      width: 160,
+      width: 180,
       height: 8,
     },
   )
@@ -1159,6 +1171,7 @@ test("direct footer mode label keeps left padding without a status pill", async 
 
     expect(statusline).toBeDefined()
     expect(statusline?.startsWith(" BUILD ")).toBe(true)
+    expect(statusline).toContain("BUILD · Intermediate")
   } finally {
     app.cleanup()
   }
@@ -1407,5 +1420,57 @@ test("direct variant panel renders current variant selector", async () => {
     expectPaletteList(list, 1)
   } finally {
     app.renderer.destroy()
+  }
+})
+
+
+test("mini response-style selectors render every option", async () => {
+  const modes = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunExperienceModeSelectBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          title="Response style"
+          onClose={() => {}}
+          onSelect={() => {}}
+        />
+      </box>
+    ),
+    { width: 100, height: RUN_COMMAND_PANEL_ROWS },
+  )
+
+  try {
+    await modes.renderOnce()
+    const frame = modes.captureCharFrame()
+    expect(frame).toContain("Beginner")
+    expect(frame).toContain("Intermediate")
+    expect(frame).toContain("Expert")
+  } finally {
+    modes.renderer.destroy()
+  }
+
+  const scopes = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunExperienceModeSelectBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          title="Apply response style"
+          scope
+          onClose={() => {}}
+          onSelect={() => {}}
+        />
+      </box>
+    ),
+    { width: 100, height: RUN_COMMAND_PANEL_ROWS },
+  )
+
+  try {
+    await scopes.renderOnce()
+    const frame = scopes.captureCharFrame()
+    expect(frame).toContain("For this and future sessions")
+    expect(frame).toContain("For this session only")
+    expect(frame).toContain("For the next prompt only")
+  } finally {
+    scopes.renderer.destroy()
   }
 })

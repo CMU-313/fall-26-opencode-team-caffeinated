@@ -405,6 +405,11 @@ export const dict = {
   "prompt.attachment.remove": "Eliminar adjunto",
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Detener",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
 
   "prompt.toast.pasteUnsupported.title": "Adjunto no compatible",
   "prompt.toast.attachmentDuplicate.title": "Este archivo ya se ha subido",

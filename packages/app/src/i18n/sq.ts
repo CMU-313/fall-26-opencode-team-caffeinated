@@ -378,6 +378,11 @@ export const dict = {
   "prompt.attachment.remove": "Hiq shtojcën",
   "prompt.action.send": "Dërgo",
   "prompt.action.stop": "Ndalo",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
   "prompt.toast.pasteUnsupported.title": "Bashkëngjitje e pambështetur",
   "prompt.toast.pasteUnsupported.description":
     "Këtu mund të bashkëngjiten vetëm imazhe, skedarë PDF ose skedarë teksti.",

@@ -402,6 +402,11 @@ export const dict = {
   "prompt.attachment.remove": "เอาไฟล์แนบออก",
   "prompt.action.send": "ส่ง",
   "prompt.action.stop": "หยุด",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
 
   "prompt.toast.pasteUnsupported.title": "ไฟล์แนบที่ไม่รองรับ",
   "prompt.toast.attachmentDuplicate.title": "ไฟล์นี้ถูกอัปโหลดแล้ว",

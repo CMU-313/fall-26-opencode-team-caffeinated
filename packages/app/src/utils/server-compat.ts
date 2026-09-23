@@ -20,8 +20,9 @@ type LegacyClient = OpencodeClient
 type LegacyFor = (directory?: string) => LegacyClient
 type CompatibleSessionApi = Omit<
   SessionApi,
-  "prompt" | "command" | "shell" | "compact" | "rename" | "archive" | "remove"
+  "prompt" | "command" | "shell" | "compact" | "create" | "rename" | "archive" | "remove"
 > & {
+  create: (input?: Parameters<SessionApi["create"]>[0] & { experienceMode?: "beginner" | "intermediate" | "expert" }) => ReturnType<SessionApi["create"]>
   prompt: (input: SessionPromptInput & LegacyPrompt) => Promise<SessionPromptOutput>
   command: (input: SessionCommandInput) => Promise<SessionCommandOutput>
   shell: (input: SessionShellInput & LegacyPrompt) => Promise<SessionShellOutput>
@@ -43,6 +44,7 @@ type LegacyPrompt = {
   agent?: string
   model?: { providerID: string; modelID: string }
   variant?: string
+  experienceMode?: "beginner" | "intermediate" | "expert"
   legacyParts?: (TextPartInput | FilePartInput | AgentPartInput)[]
 }
 type LegacyLocation = { directory?: string }
@@ -85,9 +87,18 @@ function sessionInfo(session: Session): SessionInfo {
 
 export function createCompatibleApi(input: CompatibleInput): CompatibleApi {
   const v1 = createV1Api(input)
+  const current = {
+    ...input.current,
+    session: {
+      ...input.current.session,
+      create(value?: Parameters<CompatibleSessionApi["create"]>[0]) {
+        return input.current.session.create(value)
+      },
+    },
+  }
   return lazyApi(
-    input.protocol.then((protocol) => (protocol === "v1" ? v1 : input.current)),
-    input.current,
+    input.protocol.then((protocol) => (protocol === "v1" ? v1 : current)),
+    current,
   )
 }
 
@@ -160,9 +171,10 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
         })
         return { data: (result.data ?? []).map(sessionInfo), cursor: {} }
       },
-      async create(value?: Parameters<ServerApi["session"]["create"]>[0]) {
+      async create(value?: Parameters<CompatibleSessionApi["create"]>[0]) {
         const result = await legacy(value?.location ?? undefined).session.create({
           directory: directory(value?.location ?? undefined),
+          experienceMode: value?.experienceMode,
         })
         if (!result.data) throw new Error("Failed to create session")
         return sessionInfo(result.data)

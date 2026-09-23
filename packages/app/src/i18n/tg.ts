@@ -379,6 +379,11 @@ export const dict = {
   "prompt.attachment.remove": "Замимаро хориҷ кунед",
   "prompt.action.send": "Фиристодан",
   "prompt.action.stop": "Ист",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
   "prompt.toast.pasteUnsupported.title": "Замимаи дастгирӣнашаванда",
   "prompt.toast.pasteUnsupported.description":
     "Дар ин ҷо танҳо тасвирҳо, PDFс ё файлҳои матнӣ замима кардан мумкин аст.",

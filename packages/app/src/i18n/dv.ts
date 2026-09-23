@@ -383,6 +383,11 @@ export const dict = {
   "prompt.attachment.remove": "އެޓޭޗްމަންޓް ނަގާށެވެ",
   "prompt.action.send": "ފޮނުވުން",
   "prompt.action.stop": "ހުއްޓުން",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
   "prompt.toast.pasteUnsupported.title": "ސަޕޯޓް ނުކުރާ އެޓޭޗްމަންޓެވެ",
   "prompt.toast.pasteUnsupported.description":
     "މިތަނުގައި އެޓޭޗް ކުރެވޭނީ ހަމައެކަނި ތަސްވީރު، PDFs، ނުވަތަ ޓެކްސްޓް ފައިލްތަކެވެ.",

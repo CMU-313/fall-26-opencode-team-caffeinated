@@ -152,6 +152,7 @@ describe("SessionV2.create", () => {
           id,
           slug: "updated",
           version: "test",
+          experienceMode: "intermediate" as const,
           projectID: created.projectID,
           directory: created.location.directory,
           title: "updated",

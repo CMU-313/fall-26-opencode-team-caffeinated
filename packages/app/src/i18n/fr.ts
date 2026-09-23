@@ -388,6 +388,11 @@ export const dict = {
   "prompt.attachment.remove": "Supprimer la pièce jointe",
   "prompt.action.send": "Envoyer",
   "prompt.action.stop": "Arrêter",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
   "prompt.toast.pasteUnsupported.title": "Pièce jointe non prise en charge",
   "prompt.toast.attachmentDuplicate.title": "Ce fichier a déjà été téléversé",
   "prompt.toast.pasteUnsupported.description":
