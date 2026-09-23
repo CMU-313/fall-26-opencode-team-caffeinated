@@ -405,6 +405,11 @@ export const dict = {
   "prompt.attachment.remove": "Hapus lampiran",
   "prompt.action.send": "Kirim",
   "prompt.action.stop": "Hentikan",
+  "prompt.experienceMode.label": "Response style",
+  "prompt.experienceMode.beginner": "Beginner",
+  "prompt.experienceMode.intermediate": "Intermediate",
+  "prompt.experienceMode.expert": "Expert",
+  "prompt.toast.experienceModeUpdateFailed.title": "Unable to update response style",
 
   "prompt.toast.pasteUnsupported.title": "Lampiran tidak didukung",
   "prompt.toast.pasteUnsupported.description": "Hanya gambar, PDF, atau berkas teks yang dapat dilampirkan di sini.",
