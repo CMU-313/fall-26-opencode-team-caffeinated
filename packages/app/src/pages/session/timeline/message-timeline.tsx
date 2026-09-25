@@ -77,6 +77,7 @@ import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
+import { DebugModePanel } from "./debug-mode-panel"
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -1062,25 +1063,50 @@ export function MessageTimeline(props: {
       if (!item) return
       return partDefaultOpen(item, settings.general.shellToolPartsExpanded(), settings.general.editToolPartsExpanded())
     })
+    const debugFailure = createMemo(() => {
+      const item = part()
+      if (item?.type !== "tool" || item.tool !== "bash" || item.state.status !== "completed") return
+      if (typeof item.state.input.command !== "string") return
+      const exit = typeof item.state.metadata?.exit === "number" ? item.state.metadata.exit : undefined
+      const output = item.state.output
+      const failureOutput = /assert|expected|received|traceback|error|exception|at .+?:\d+/i.test(output)
+      if (exit === 0 || (exit === undefined && !failureOutput)) return
+      return {
+        command: item.state.input.command,
+        output,
+        exit,
+      }
+    })
+    const debugPanel = createMemo(() => {
+      const id = sessionID()
+      const failure = debugFailure()
+      if (!id || !failure) return
+      return { sessionID: id, failure }
+    })
 
     return (
       <Show when={message()}>
         {(message) => (
           <Show when={part()}>
             {(part) => (
-              <MessagePart
-                part={part()}
-                message={message()}
-                showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
-                turnDurationMs={turnDurationMs(row().userMessageID)}
-                useV2Actions={settings.general.newLayoutDesigns()}
-                defaultOpen={defaultOpen()}
-                toolOpen={toolOpen[part().id] ?? defaultOpen()}
-                onToolOpenChange={(open) => setToolOpen(part().id, open)}
-                deferToolContent
-                virtualizeDiff={false}
-                onContentRendered={onSizeChange}
-              />
+              <>
+                <MessagePart
+                  part={part()}
+                  message={message()}
+                  showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
+                  turnDurationMs={turnDurationMs(row().userMessageID)}
+                  useV2Actions={settings.general.newLayoutDesigns()}
+                  defaultOpen={defaultOpen()}
+                  toolOpen={toolOpen[part().id] ?? defaultOpen()}
+                  onToolOpenChange={(open) => setToolOpen(part().id, open)}
+                  deferToolContent
+                  virtualizeDiff={false}
+                  onContentRendered={onSizeChange}
+                />
+                <Show when={debugPanel()}>
+                  {(panel) => <DebugModePanel sessionID={panel().sessionID} failure={panel().failure} />}
+                </Show>
+              </>
             )}
           </Show>
         )}
