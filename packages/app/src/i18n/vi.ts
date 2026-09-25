@@ -1,4 +1,7 @@
+import { DEBUG_MODE_ENGLISH } from "./debug-mode"
+
 export const dict = {
+  ...DEBUG_MODE_ENGLISH,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "Tệp",
   "desktop.menu.edit": "Chỉnh sửa",
