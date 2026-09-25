@@ -1,7 +1,9 @@
 import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
+import { DEBUG_MODE_ENGLISH } from "./debug-mode"
 
 export const dict = {
   ...DESKTOP_NATIVE_ENGLISH,
+  ...DEBUG_MODE_ENGLISH,
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
   "command.category.project": "Project",

@@ -93,7 +93,10 @@ const desktop = [
   "Odabrani prilozi premašuju ograničenje od {{limit}} MB",
 ]
 
+import { DEBUG_MODE_ENGLISH } from "./debug-mode"
+
 export const dict = {
+  ...DEBUG_MODE_ENGLISH,
   ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
   "command.category.suggested": "Predloženo",
   "command.category.view": "Prikaz",
