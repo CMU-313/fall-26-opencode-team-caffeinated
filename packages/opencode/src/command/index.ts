@@ -94,7 +94,7 @@ const layer = Layer.effect(
           "evaluate test coverage [path|package], defaults to uncommitted changes, and coach you through closing gaps",
         source: "command",
         get template() {
-          return PROMPT_COVERAGE
+          return PROMPT_COVERAGE.replaceAll("${path}", ctx.directory)
         },
         subtask: true,
         hints: hints(PROMPT_COVERAGE),

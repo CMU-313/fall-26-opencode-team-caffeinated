@@ -4,7 +4,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Command } from "@/command"
 import { Config } from "@/config/config"
 import { TestConfig } from "../fixture/config"
-import { disposeAllInstances } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import PROMPT_COVERAGE from "@/command/template/coverage.txt"
 
@@ -31,12 +31,13 @@ describe("command.coverage", () => {
     }),
   )
 
-  it.instance("resolves its template to the coverage prompt verbatim", () =>
+  it.instance("resolves its template with ${path} substituted for the current working directory", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service
+      const test = yield* TestInstance
       const info = yield* command.get("coverage")
 
-      expect(info?.template).toBe(PROMPT_COVERAGE)
+      expect(info?.template).toBe(PROMPT_COVERAGE.replaceAll("${path}", test.directory))
     }),
   )
 

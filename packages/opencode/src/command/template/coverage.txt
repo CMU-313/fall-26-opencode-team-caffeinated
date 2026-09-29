@@ -8,10 +8,12 @@ Input: $ARGUMENTS
 
 ## Determining Scope
 
+The current working directory is `${path}`. Resolve any file, directory, or package name given in $ARGUMENTS relative to `${path}` first, not the repo root, since `${path}` may already be inside a specific package.
+
 1. **No arguments (default)**: Focus on files changed but not yet committed.
    - Run: `git status --short` and `git diff` to see what changed.
-2. **A file or directory path**: Focus coverage analysis there instead.
-3. **A package name**: Focus on that package's own test suite.
+2. **A file or directory path**: Resolve it relative to `${path}` (e.g. `${path}/<input>`) and focus coverage analysis there.
+3. **A package name**: Look for a directory named `<input>` relative to `${path}` (e.g. `${path}/<input>`, or `${path}/packages/<input>` in a monorepo) and focus on that package's own test suite.
 
 Use best judgement when the input is ambiguous.
 
