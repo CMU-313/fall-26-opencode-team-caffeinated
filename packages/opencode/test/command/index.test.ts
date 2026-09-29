@@ -27,6 +27,7 @@ describe("command.coverage", () => {
       expect(coverage?.description).toBe(
         "evaluate test coverage [path|package], defaults to uncommitted changes, and coach you through closing gaps",
       )
+      expect(coverage?.subtask).toBe(true)
     }),
   )
 

@@ -96,6 +96,7 @@ const layer = Layer.effect(
         get template() {
           return PROMPT_COVERAGE
         },
+        subtask: true,
         hints: hints(PROMPT_COVERAGE),
       }
 
