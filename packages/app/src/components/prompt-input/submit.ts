@@ -500,6 +500,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       input.onQueue?.(draft)
       clearContext(submission.target())
       clearInput()
+      input.onNextPromptExperienceModeUsed?.()
       return
     }
 
@@ -507,6 +508,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     if (mode === "shell") {
       clearInput()
+      input.onNextPromptExperienceModeUsed?.()
       const eventID = Event.ID.create()
       sdk()
         .api.session.shell({
@@ -532,6 +534,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const customCommand = sync().data.command.find((c) => c.name === commandName)
       if (customCommand) {
         clearInput()
+        input.onNextPromptExperienceModeUsed?.()
         const messageID = Identifier.ascending("message")
         serverSync().session.set("session_status", session.id, { type: "busy" })
         sdk()
