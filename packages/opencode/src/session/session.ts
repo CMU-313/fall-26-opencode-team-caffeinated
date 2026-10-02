@@ -26,7 +26,7 @@ import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
-import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { PartTable, SessionPreferenceTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
@@ -44,6 +44,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { ExperienceMode } from "@opencode-ai/schema/experience-mode"
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
@@ -108,6 +109,7 @@ export function fromRow(row: SessionRow): Info {
     metadata: row.metadata ?? undefined,
     revert,
     permission: row.permission ? [...row.permission] : undefined,
+    experienceMode: row.experience_mode,
     time: {
       created: row.time_created,
       updated: row.time_updated,
@@ -151,6 +153,7 @@ export function toRow(info: Info) {
         }
       : null,
     permission: info.permission,
+    experience_mode: info.experienceMode,
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
@@ -220,6 +223,8 @@ const Model = Schema.Struct({
 })
 
 export const Metadata = Schema.Record(Schema.String, Schema.Any)
+export { ExperienceMode }
+export const ExperienceModeScope = Schema.Union([Schema.Literal("session"), Schema.Literal("session_and_preference")])
 
 export const Info = Schema.Struct({
   id: SessionID,
@@ -241,6 +246,7 @@ export const Info = Schema.Struct({
   time: Time,
   permission: optional(PermissionV1.Ruleset),
   revert: optional(Revert),
+  experienceMode: ExperienceMode,
 }).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
@@ -266,6 +272,7 @@ export const CreateInput = Schema.optional(
     metadata: Schema.optional(Metadata),
     permission: Schema.optional(PermissionV1.Ruleset),
     workspaceID: Schema.optional(WorkspaceV2.ID),
+    experienceMode: Schema.optional(ExperienceMode),
   }),
 )
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
@@ -423,7 +430,9 @@ export interface Interface {
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
     workspaceID?: WorkspaceV2.ID
+    experienceMode?: ExperienceMode
   }) => Effect.Effect<Info>
+  readonly getExperienceModePreference: () => Effect.Effect<ExperienceMode>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
@@ -446,6 +455,11 @@ export interface Interface {
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
   readonly setShare: (input: { sessionID: SessionID; share: Info["share"] }) => Effect.Effect<void>
   readonly setWorkspace: (input: { sessionID: SessionID; workspaceID: Info["workspaceID"] }) => Effect.Effect<void>
+  readonly setExperienceMode: (input: {
+    sessionID: SessionID
+    experienceMode: ExperienceMode
+    scope?: Schema.Schema.Type<typeof ExperienceModeScope>
+  }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
@@ -509,6 +523,7 @@ const layer: Layer.Layer<
       path?: string
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
+      experienceMode: ExperienceMode
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -525,6 +540,7 @@ const layer: Layer.Layer<
         model: input.model,
         metadata: input.metadata,
         permission: input.permission ? [...input.permission] : undefined,
+        experienceMode: input.experienceMode,
         cost: 0,
         tokens: EmptyTokens,
         time: {
@@ -666,6 +682,15 @@ const layer: Layer.Layer<
       } as SessionV1.Part
     })
 
+    const getExperienceModePreference = Effect.fn("Session.getExperienceModePreference")(function* () {
+      return (yield* db
+        .select()
+        .from(SessionPreferenceTable)
+        .where(eq(SessionPreferenceTable.id, 1))
+        .get()
+        .pipe(Effect.orDie))?.experience_mode ?? "intermediate"
+    })
+
     const create = Effect.fn("Session.create")(function* (input?: {
       parentID?: SessionID
       title?: string
@@ -674,9 +699,22 @@ const layer: Layer.Layer<
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
       workspaceID?: WorkspaceV2.ID
+      experienceMode?: ExperienceMode
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
+      const preference = input?.experienceMode ?? (yield* getExperienceModePreference())
+      if (input?.experienceMode !== undefined) {
+        yield* db
+          .insert(SessionPreferenceTable)
+          .values({ id: 1, experience_mode: input.experienceMode, time_updated: Date.now() })
+          .onConflictDoUpdate({
+            target: SessionPreferenceTable.id,
+            set: { experience_mode: input.experienceMode, time_updated: Date.now() },
+          })
+          .run()
+          .pipe(Effect.orDie)
+      }
       return yield* createNext({
         parentID: input?.parentID,
         directory: ctx.directory,
@@ -687,6 +725,7 @@ const layer: Layer.Layer<
         metadata: input?.metadata,
         permission: input?.permission,
         workspaceID: input?.workspaceID ?? workspace,
+        experienceMode: preference,
       })
     })
 
@@ -700,6 +739,7 @@ const layer: Layer.Layer<
         workspaceID: original.workspaceID,
         title,
         metadata: structuredClone(original.metadata),
+        experienceMode: original.experienceMode,
       })
       const msgs = yield* messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
@@ -813,6 +853,41 @@ const layer: Layer.Layer<
       yield* patch(input.sessionID, { share: input.share ?? null, time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
+    const setExperienceMode = Effect.fn("Session.setExperienceMode")(function* (input: {
+      sessionID: SessionID
+      experienceMode: ExperienceMode
+      scope?: Schema.Schema.Type<typeof ExperienceModeScope>
+    }) {
+      const current = yield* get(input.sessionID).pipe(Effect.orDie)
+      const time = Date.now()
+      const scope = input.scope ?? "session_and_preference"
+      yield* db
+        .transaction((tx) =>
+          Effect.gen(function* () {
+            yield* tx
+              .update(SessionTable)
+              .set({ experience_mode: input.experienceMode, time_updated: time })
+              .where(eq(SessionTable.id, input.sessionID))
+              .run()
+            if (scope === "session_and_preference") {
+              yield* tx
+                .insert(SessionPreferenceTable)
+                .values({ id: 1, experience_mode: input.experienceMode, time_updated: time })
+                .onConflictDoUpdate({
+                  target: SessionPreferenceTable.id,
+                  set: { experience_mode: input.experienceMode, time_updated: time },
+                })
+                .run()
+            }
+          }),
+        )
+        .pipe(Effect.orDie)
+      yield* events.publish(SessionV1.Event.Updated, {
+        sessionID: input.sessionID,
+        info: { ...current, experienceMode: input.experienceMode, time: { ...current.time, updated: time } },
+      })
+    })
+
     const setWorkspace = Effect.fn("Session.setWorkspace")(function* (input: {
       sessionID: SessionID
       workspaceID: Info["workspaceID"]
@@ -909,6 +984,7 @@ const layer: Layer.Layer<
       list,
       listGlobal,
       create,
+      getExperienceModePreference,
       fork,
       touch,
       get,
@@ -922,6 +998,7 @@ const layer: Layer.Layer<
       setSummary,
       setShare,
       setWorkspace,
+      setExperienceMode,
       diff,
       messages,
       children,

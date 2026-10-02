@@ -17,6 +17,7 @@ const info = {
   share: undefined,
   title: "Test session",
   version: "1.0.0",
+    experienceMode: "intermediate" as const,
   time: {
     created: 1,
     updated: 2,

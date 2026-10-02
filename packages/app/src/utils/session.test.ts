@@ -32,6 +32,7 @@ describe("normalizeSessionInfo", () => {
       agent: "build",
       model: { id: "gpt-5", providerID: "openai", variant: "high" },
       version: "",
+      experienceMode: "intermediate",
       time: { created: 1, updated: 1 },
       revert: { messageID: "message-1", partID: "part-1", snapshot: "snapshot" },
     })

@@ -41,6 +41,7 @@ export type PromptInputV2Props = {
   borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
+  experienceModeControl?: JSX.Element
   variantControlVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
@@ -225,6 +226,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                 />
               )}
             </Show>
+            <Show when={props.experienceModeControl}>{props.experienceModeControl}</Show>
             <Show
               when={props.modelControl}
               fallback={

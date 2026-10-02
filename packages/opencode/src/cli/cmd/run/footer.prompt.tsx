@@ -48,7 +48,7 @@ type Auto = RunFooterMenuItem & {
 type SlashOption = RunFooterMenuItem & {
   kind: "slash"
   name: string
-  action?: "skill-menu" | "editor"
+  action?: "skill-menu" | "editor" | "experience-mode"
 }
 
 type PromptOption = Auto | SlashOption
@@ -76,6 +76,7 @@ type PromptInput = {
   onExitRequest?: () => boolean
   onExit: () => void
   onSkillMenu: () => void
+  onExperienceMode: () => void
   onRows: (rows: number) => void
   onStatus: (text: string) => void
 }
@@ -409,6 +410,13 @@ export function createPromptState(input: PromptInput): PromptState {
   )
   const slashOptions = createMemo<SlashOption[]>(() => {
     const builtins = [
+      {
+        kind: "slash",
+        action: "experience-mode" as const,
+        name: "skill-mode",
+        display: "/skill-mode",
+        description: "choose your response style",
+      } satisfies SlashOption,
       {
         kind: "slash",
         action: "editor" as const,
@@ -856,6 +864,12 @@ export function createPromptState(input: PromptInput): PromptState {
       if (next.action === "skill-menu") {
         cancelAutocomplete()
         input.onSkillMenu()
+        return
+      }
+
+      if (next.action === "experience-mode") {
+        cancelAutocomplete()
+        input.onExperienceMode()
         return
       }
 
