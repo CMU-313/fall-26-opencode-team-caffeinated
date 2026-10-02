@@ -1,0 +1,14 @@
+{
+  "name": "OpenCode Bun Dev",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "oven.bun-vscode"
+      ]
+    }
+  },
+  "postCreateCommand": "bun install"
+}

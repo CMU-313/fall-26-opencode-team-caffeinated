@@ -9,6 +9,7 @@ import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_COVERAGE from "./template/coverage.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
@@ -46,6 +47,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  COVERAGE: "coverage",
 } as const
 
 export interface Interface {
@@ -85,6 +87,17 @@ const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.COVERAGE] = {
+        name: Default.COVERAGE,
+        description:
+          "evaluate test coverage [path|package], defaults to uncommitted changes, and coach you through closing gaps",
+        source: "command",
+        get template() {
+          return PROMPT_COVERAGE.replaceAll("${path}", ctx.directory)
+        },
+        subtask: true,
+        hints: hints(PROMPT_COVERAGE),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
