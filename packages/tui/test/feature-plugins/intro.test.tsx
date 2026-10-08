@@ -8,6 +8,7 @@ import { createStore } from "solid-js/store"
 import { TuiConfigProvider } from "../../src/config"
 import { OpencodeKeymapProvider } from "../../src/keymap"
 import introPlugin from "../../src/feature-plugins/home/intro"
+import { createBuiltinPlugins, type BuiltinTuiPlugin } from "../../src/feature-plugins/builtins"
 import { createTuiPluginApi } from "../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { TestTuiContexts } from "../fixture/tui-environment"
@@ -161,20 +162,223 @@ test("Start over clears the read checkmarks, keeps real setup, and says why", as
   }
 })
 
-async function renderIntro(input: { provider?: string; sessions?: number; files?: string[]; firstLaunch?: boolean }) {
+test("turning off the launch pop-up keeps it closed on the next launch", async () => {
+  const intro = await renderIntro({ plugin: await freshLaunch("off"), firstLaunch: true, hideOnLaunch: true })
+  try {
+    await intro.app.waitForFrame((frame) => frame.includes("New to OpenCode"))
+    await intro.app.renderOnce()
+    expect(intro.app.captureCharFrame()).not.toContain("Welcome to OpenCode")
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("it doesn't open on top of another dialog at launch", async () => {
+  const intro = await renderIntro({ plugin: await freshLaunch("busy"), firstLaunch: true, dialogOpen: true })
+  try {
+    await intro.app.waitForFrame((frame) => frame.includes("Another dialog"))
+    await intro.app.renderOnce()
+    expect(intro.app.captureCharFrame()).not.toContain("Welcome to OpenCode")
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("clicking the home link opens it, and clicking esc closes it", async () => {
+  const intro = await renderIntro({})
+  try {
+    await intro.app.waitForFrame((frame) => frame.includes("New to OpenCode"))
+    await click(intro.app, "New to OpenCode? Open the intro")
+    await intro.app.waitForFrame((frame) => frame.includes("Welcome to OpenCode"))
+
+    await click(intro.app, "esc")
+    await intro.app.waitForFrame((frame) => !frame.includes("Welcome to OpenCode"))
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("if the file list fails, it still opens and the AGENTS.md step stays unchecked", async () => {
+  const intro = await renderIntro({ filesFail: true })
+  try {
+    intro.commands.get("intro.open")!.run?.({} as never)
+    await intro.app.waitForFrame((frame) => frame.includes("0/6 done"))
+
+    await click(intro.app, "Point it at the right files")
+    await intro.app.waitForFrame((frame) => frame.includes("checks off when your project has an AGENTS.md"))
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("a CLAUDE.md file counts the same as AGENTS.md", async () => {
+  const intro = await renderIntro({ provider: "anthropic", files: ["CLAUDE.md"] })
+  try {
+    intro.commands.get("intro.open")!.run?.({} as never)
+    // Connected and CLAUDE.md: steps 1 and 3 are done, so step 2 opens first
+    await intro.app.waitForFrame((frame) => frame.includes("2/6 done"))
+    expect(intro.app.captureCharFrame()).toContain("Type in the prompt box")
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("a second session checks off the sessions step", async () => {
+  const intro = await renderIntro({ provider: "anthropic", sessions: 2, files: ["AGENTS.md"] })
+  try {
+    intro.commands.get("intro.open")!.run?.({} as never)
+    // Steps 1, 2, 3, and 6 are verified; step 4 opens first and counts as read
+    await intro.app.waitForFrame((frame) => frame.includes("5/6 done"))
+
+    await click(intro.app, "Manage your conversations")
+    await intro.app.waitForFrame((frame) => frame.includes("✓ Done. You have more than one session in this project."))
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("a paid model from the built-in provider counts as connected", async () => {
+  const intro = await renderIntro({ provider: "opencode", paid: true })
+  try {
+    intro.commands.get("intro.open")!.run?.({} as never)
+    // Step 1 is done, so step 2 opens first
+    await intro.app.waitForFrame((frame) => frame.includes("1/6 done"))
+    expect(intro.app.captureCharFrame()).toContain("Type in the prompt box")
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("when every step is done it shows 6/6 and opens at step 1", async () => {
+  const intro = await renderIntro({ provider: "anthropic", sessions: 2, files: ["AGENTS.md"] })
+  try {
+    intro.kv.set("intro_read", [3, 4])
+    intro.commands.get("intro.open")!.run?.({} as never)
+    await intro.app.waitForFrame((frame) => frame.includes("6/6 done"))
+    expect(intro.app.captureCharFrame()).toContain("✓ Done. You've connected a provider.")
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("clicking a step opens it and marks it read; clicking it again folds it", async () => {
+  const intro = await renderIntro({})
+  try {
+    intro.commands.get("intro.open")!.run?.({} as never)
+    await intro.app.waitForFrame((frame) => frame.includes("free models"))
+
+    await click(intro.app, "Plan first, then build")
+    await intro.app.waitForFrame((frame) => frame.includes("switch between two agents"))
+    expect(intro.app.captureCharFrame()).not.toContain("free models")
+    expect(intro.kv.get<number[]>("intro_read", [])).toContain(3)
+
+    await click(intro.app, "Plan first, then build")
+    await intro.app.waitForFrame((frame) => !frame.includes("switch between two agents"))
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("an open answer closes when you move to another step", async () => {
+  const intro = await renderIntro({})
+  try {
+    intro.commands.get("intro.open")!.run?.({} as never)
+    await intro.app.waitForFrame((frame) => frame.includes("Do I need to pay for a model?"))
+    await click(intro.app, "Do I need to pay for a model?")
+    await intro.app.waitForFrame((frame) => frame.includes("work without signing in"))
+
+    await click(intro.app, "Ask for what you want")
+    await intro.app.waitForFrame((frame) => frame.includes("What makes a good request?"))
+    expect(intro.app.captureCharFrame()).not.toContain("Say what to change")
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("the commands row opens the command palette", async () => {
+  const intro = await renderIntro({})
+  try {
+    intro.commands.get("intro.open")!.run?.({} as never)
+    await intro.app.waitForFrame((frame) => frame.includes("See every command OpenCode has"))
+    await click(intro.app, "See every command OpenCode has")
+    expect(intro.dispatched).toEqual(["command.palette.show"])
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("pressing up on the first row stays on the first row", async () => {
+  const intro = await renderIntro({})
+  try {
+    intro.commands.get("intro.open")!.run?.({} as never)
+    await intro.app.waitForFrame((frame) => frame.includes("› 1  Connect a model"))
+    intro.app.mockInput.pressArrow("up")
+    intro.app.mockInput.pressArrow("down")
+    await intro.app.waitForFrame((frame) => frame.includes("› ▶ Try it: Open /connect"))
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("Start over with nothing verified just says progress was cleared", async () => {
+  const intro = await renderIntro({})
+  try {
+    intro.kv.set("intro_read", [3, 4])
+    intro.commands.get("intro.open")!.run?.({} as never)
+    await intro.app.waitForFrame((frame) => frame.includes("2/6 done"))
+
+    await click(intro.app, "Start over")
+    await intro.app.waitForFrame((frame) => frame.includes("0/6 done"))
+    expect(intro.toasts).toEqual(["Progress cleared."])
+  } finally {
+    intro.app.renderer.destroy()
+  }
+})
+
+test("the intro is registered as a built-in plugin", () => {
+  expect(createBuiltinPlugins({ experimentalEventSystem: false })).toContain(introPlugin)
+})
+
+// The intro auto-opens only once per process, so launch tests load their own copy of the module
+async function freshLaunch(name: string): Promise<BuiltinTuiPlugin> {
+  const module: { default: BuiltinTuiPlugin } = await import(`../../src/feature-plugins/home/intro.tsx?${name}`)
+  return module.default
+}
+
+async function click(app: Awaited<ReturnType<typeof testRender>>, text: string) {
+  const lines = app.captureCharFrame().split("\n")
+  const y = lines.findIndex((line) => line.includes(text))
+  expect(y).toBeGreaterThanOrEqual(0)
+  await app.mockMouse.click(lines[y].indexOf(text), y)
+  await app.renderOnce()
+}
+
+async function renderIntro(input: {
+  provider?: string
+  paid?: boolean
+  sessions?: number
+  files?: string[]
+  filesFail?: boolean
+  firstLaunch?: boolean
+  hideOnLaunch?: boolean
+  dialogOpen?: boolean
+  plugin?: BuiltinTuiPlugin
+}) {
   const commands = new Map<
     string,
     NonNullable<Parameters<TuiPluginApi["keymap"]["registerLayer"]>[0]["commands"]>[number]
   >()
   const dispatched: string[] = []
   const toasts: string[] = []
-  const [dialog, setDialog] = createSignal<{ render: () => JSX.Element; onClose?: () => void }>()
+  const [dialog, setDialog] = createSignal<{ render: () => JSX.Element; onClose?: () => void } | undefined>(
+    input.dialogOpen ? { render: () => <text>Another dialog</text> } : undefined,
+  )
   let homeBottom: (() => JSX.Element) | undefined
   let fileListInput: unknown
   // Reactive like the real KV store, so the intro re-renders when progress is saved or cleared
   // Other tests open the intro themselves, so stop it auto-opening even when a test runs alone
   const [values, setValues] = createStore<Record<string, unknown>>(
-    input.firstLaunch ? {} : { intro_hide_on_launch: true },
+    input.firstLaunch && !input.hideOnLaunch ? {} : { intro_hide_on_launch: true },
   )
   const kv = {
     get: (name: string, fallback?: unknown) => (name in values ? values[name] : fallback),
@@ -199,6 +403,7 @@ async function renderIntro(input: { provider?: string; sessions?: number; files?
         file: {
           list: async (params: unknown) => {
             fileListInput = params
+            if (input.filesFail) throw new Error("file list unavailable")
             return { data: (input.files ?? []).map((name) => ({ name })) }
           },
         },
@@ -209,7 +414,9 @@ async function renderIntro(input: { provider?: string; sessions?: number; files?
       kv,
       state: {
         ...base.state,
-        provider: input.provider ? [{ id: input.provider, models: { free: { cost: { input: 0 } } } }] : [],
+        provider: input.provider
+          ? [{ id: input.provider, models: { model: { cost: { input: input.paid ? 3 : 0 } } } }]
+          : [],
         session: { ...base.state.session, count: () => input.sessions ?? 0 },
       },
       slots: {
@@ -239,7 +446,7 @@ async function renderIntro(input: { provider?: string; sessions?: number; files?
       },
     } as unknown as TuiPluginApi
 
-    void introPlugin.tui(api, undefined, pluginMeta)
+    void (input.plugin ?? introPlugin).tui(api, undefined, pluginMeta)
 
     return (
       <TestTuiContexts>
