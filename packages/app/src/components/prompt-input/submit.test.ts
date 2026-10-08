@@ -135,6 +135,7 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+    toaster: { dismiss: () => undefined },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -594,5 +595,50 @@ describe("prompt submit worktree selection", () => {
     expect(storedSessions["/repo/worktree-a"]).toHaveLength(1)
     expect(storedSessions["/repo/worktree-a"]?.[0]).toMatchObject({ id: "session-1", title: "New session 1" })
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("consumes next-prompt experience mode for queued, shell, and custom-command submissions", async () => {
+    params = { id: "session-1" }
+    let queued: { experienceMode?: string } | undefined
+    let used = 0
+    const input = {
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value: Prompt) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      nextPromptExperienceMode: () => "expert" as const,
+      onNextPromptExperienceModeUsed: () => used++,
+    }
+
+    await createPromptSubmit({
+      ...input,
+      mode: () => "normal" as const,
+      shouldQueue: () => true,
+      onQueue: (draft) => {
+        queued = draft
+      },
+    }).handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    await createPromptSubmit({ ...input, mode: () => "shell" as const }).handleSubmit(
+      { preventDefault: () => undefined } as unknown as Event,
+    )
+
+    commands.push({ name: "review" })
+    promptValue = [{ type: "text", content: "/review staged changes", start: 0, end: 22 }]
+    await createPromptSubmit({ ...input, mode: () => "normal" as const }).handleSubmit(
+      { preventDefault: () => undefined } as unknown as Event,
+    )
+
+    expect(queued).toMatchObject({ experienceMode: "expert" })
+    expect(used).toBe(3)
   })
 })

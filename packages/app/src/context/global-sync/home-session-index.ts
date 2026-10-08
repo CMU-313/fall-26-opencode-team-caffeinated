@@ -169,6 +169,7 @@ function toLegacySummary(session: SessionV2Info): Session {
     agent: session.agent,
     model: session.model,
     version: "",
+    experienceMode: "intermediate",
     time: session.time,
   }
 }

@@ -9,6 +9,7 @@ import {
   createMemo,
   createSignal,
   createResource,
+  onMount,
   Switch,
   Match,
   type JSX,
@@ -46,6 +47,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover, ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
+import { DialogSelectExperienceMode } from "@/components/dialog-select-experience-mode"
 import { useCommand } from "@/context/command"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -73,6 +75,7 @@ import {
   type PromptInputSubmission,
 } from "./prompt-input/contracts"
 import { createPromptSubmit } from "./prompt-input/submit"
+import { loadExperienceModePreference } from "./prompt-input/experience-mode"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -252,6 +255,73 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return paths
   })
   const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
+  const [experienceMode, setExperienceMode] = createSignal<"beginner" | "intermediate" | "expert">("intermediate")
+  const [nextPromptExperienceMode, setNextPromptExperienceMode] = createSignal<
+    "beginner" | "intermediate" | "expert" | undefined
+  >()
+  const [newSessionExperienceModeScope, setNewSessionExperienceModeScope] = createSignal<
+    "session" | "session_and_preference" | "next" | undefined
+  >()
+  createEffect(on(() => info()?.experienceMode, (value) => {
+    if (value) setExperienceMode(value)
+  }))
+  onMount(() => {
+    if (props.controls.session.id) return
+    void loadExperienceModePreference(() => sdk().client.session.experienceModePreference({ directory: sdk().directory })).then(
+      (mode) => {
+        if (mode) setExperienceMode(mode)
+      },
+    )
+  })
+  const selectExperienceMode = async (
+    value: "beginner" | "intermediate" | "expert",
+    scope: "session" | "session_and_preference",
+  ) => {
+    const previous = experienceMode()
+    setExperienceMode(value)
+    const sessionID = props.controls.session.id
+    if (!sessionID) {
+      restoreFocus()
+      return
+    }
+    try {
+      await sdk().client.session.update({
+        sessionID,
+        directory: info()?.directory ?? sdk().directory,
+        experienceMode: value,
+        ...(scope === "session" ? { experienceModeScope: scope } : {}),
+      })
+    } catch (error) {
+      setExperienceMode(previous)
+      showToast({ title: language.t("prompt.toast.experienceModeUpdateFailed.title"), description: String(error) })
+    }
+    restoreFocus()
+  }
+  const chooseExperienceMode = () => {
+    void dialog.show(() => (
+      <DialogSelectExperienceMode
+        session={Boolean(props.controls.session.id)}
+        onSelect={(mode, scope) => {
+          if (!props.controls.session.id) {
+            setExperienceMode(mode)
+            setNewSessionExperienceModeScope(scope)
+            setNextPromptExperienceMode(scope === "next" ? mode : undefined)
+            dialog.close()
+            restoreFocus()
+            return
+          }
+          if (scope === "next") {
+            setNextPromptExperienceMode(mode)
+            dialog.close()
+            restoreFocus()
+            return
+          }
+          void selectExperienceMode(mode, scope)
+          dialog.close()
+        }}
+      />
+    ))
+  }
   const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
@@ -466,6 +536,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       keybind: normalModeKey,
       disabled: store.mode === "normal",
       onSelect: () => setMode("normal"),
+    },
+    {
+      id: "prompt.style",
+      title: "Response style",
+      description: "Choose how detailed responses should be",
+      category: language.t("command.category.session"),
+      slash: "skill-mode",
+      disabled: store.mode !== "normal",
+      onSelect: chooseExperienceMode,
     },
   ])
 
@@ -693,7 +772,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const builtin = command.options
-      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
+      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash && opt.id !== "prompt.style")
       .map((opt) => ({
         id: opt.id,
         trigger: opt.slash!,
@@ -712,11 +791,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       // source: cmd.source,
     }))
 
-    return [...custom, ...builtin]
+    return [
+      {
+        id: "prompt.style",
+        trigger: "skill-mode",
+        title: "Response style",
+        description: "Choose how detailed responses should be",
+        type: "builtin" as const,
+      },
+      ...custom,
+      ...builtin,
+    ]
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
+    if (cmd.id === "prompt.style") {
+      closePopover()
+      chooseExperienceMode()
+      return
+    }
     const menu = store.slashMenu
     closePopover()
     const images = imageAttachments()
@@ -1227,6 +1321,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onAbort: props.onAbort,
       onSubmit: props.onSubmit,
       model: props.controls.model.selection,
+      experienceMode,
+      newSessionExperienceModeScope,
+      nextPromptExperienceMode,
+      onNextPromptExperienceModeUsed: () => setNextPromptExperienceMode(undefined),
     })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1673,6 +1771,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       />
                     </TooltipKeybind>
                   </div>
+                </Show>
+                <Show when={store.mode !== "shell"}>
+                  <Tooltip placement="top" gutter={4} value="Response style">
+                    <Button
+                      variant="ghost"
+                      size="normal"
+                      class="capitalize text-13-regular text-text-base"
+                      style={control()}
+                      onClick={chooseExperienceMode}
+                    >
+                      {experienceMode()}
+                    </Button>
+                  </Tooltip>
                 </Show>
                 <Show when={!providersLoading()}>
                   <Show when={store.mode !== "shell"}>

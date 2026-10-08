@@ -356,6 +356,7 @@ function child(id: string): SessionChild {
     directory: "/tmp",
     title: id,
     version: "1",
+    experienceMode: "intermediate",
     time: {
       created: 1,
       updated: 1,

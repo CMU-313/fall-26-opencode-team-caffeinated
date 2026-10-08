@@ -20,6 +20,7 @@ import {
   RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
+  RunExperienceModeSelectBody,
 } from "./footer.command"
 import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody } from "./footer.subagent"
@@ -106,6 +107,8 @@ type RunFooterViewProps = {
   onExit: () => void
   onModelSelect: (model: NonNullable<RunInput["model"]>) => void
   onVariantSelect: (variant: string | undefined) => void
+  experienceMode: () => "beginner" | "intermediate" | "expert"
+  onExperienceMode: (mode: "beginner" | "intermediate" | "expert", scope: "session_and_preference" | "session" | "next") => void
   onRows: (rows: number) => void
   onLayout: (input: { route: FooterPromptRoute; autocomplete: boolean; subagentRows: number }) => void
   onStatus: (text: string) => void
@@ -142,6 +145,9 @@ export function RunFooterView(props: RunFooterViewProps) {
   const skilling = createMemo(() => active().type === "prompt" && route().type === "skill")
   const modeling = createMemo(() => active().type === "prompt" && route().type === "model")
   const varianting = createMemo(() => active().type === "prompt" && route().type === "variant")
+  const selectingExperienceMode = createMemo(() => active().type === "prompt" && route().type === "experience-mode")
+  const selectingExperienceModeScope = createMemo(() => active().type === "prompt" && route().type === "experience-mode-scope")
+  const [selectedExperienceMode, setSelectedExperienceMode] = createSignal<"beginner" | "intermediate" | "expert">()
   const panel = createMemo(
     () =>
       active().type === "permission" ||
@@ -151,7 +157,9 @@ export function RunFooterView(props: RunFooterViewProps) {
       commanding() ||
       skilling() ||
       modeling() ||
-      varianting(),
+      varianting() ||
+      selectingExperienceMode() ||
+      selectingExperienceModeScope(),
   )
   const selected = createMemo(() => {
     const current = route()
@@ -311,6 +319,11 @@ export function RunFooterView(props: RunFooterViewProps) {
     props.onSubagentSelect?.(undefined)
   }
 
+  const openExperienceMode = () => {
+    setRoute({ type: "experience-mode" })
+    props.onSubagentSelect?.(undefined)
+  }
+
   const openSubagentMenu = () => {
     if (tabs().length === 0) {
       return
@@ -377,6 +390,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     onExitRequest: props.onExitRequest,
     onExit: props.onExit,
     onSkillMenu: openSkillMenu,
+    onExperienceMode: openExperienceMode,
     onRows: props.onRows,
     onStatus: props.onStatus,
   })
@@ -400,6 +414,15 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     return theme().highlight
+  })
+  const experienceModeLabel = createMemo(() => {
+    const mode = props.experienceMode()
+    return `${mode.slice(0, 1).toUpperCase()}${mode.slice(1)}`
+  })
+  const experienceModeColor = createMemo(() => {
+    if (props.experienceMode() === "beginner") return theme().success
+    if (props.experienceMode() === "intermediate") return theme().warning
+    return theme().error
   })
   const statusText = createMemo(() => {
     if (exiting()) {
@@ -724,6 +747,8 @@ export function RunFooterView(props: RunFooterViewProps) {
                               props.onCycle()
                               closePanel()
                             }}
+                            experienceMode={props.experienceMode}
+                            onExperienceMode={openExperienceMode}
                             onCommand={(name) => {
                               composer.submitText(`/${name}`)
                               closePanel()
@@ -761,6 +786,30 @@ export function RunFooterView(props: RunFooterViewProps) {
                             onClose={closePanel}
                             onSelect={(model) => {
                               props.onModelSelect(model)
+                              closePanel()
+                            }}
+                          />
+                        </Match>
+                        <Match when={selectingExperienceMode()}>
+                          <RunExperienceModeSelectBody
+                            theme={theme}
+                            title="Response style"
+                            onClose={closePanel}
+                            onSelect={(mode) => {
+                              setSelectedExperienceMode(mode as "beginner" | "intermediate" | "expert")
+                              setRoute({ type: "experience-mode-scope" })
+                            }}
+                          />
+                        </Match>
+                        <Match when={selectingExperienceModeScope()}>
+                          <RunExperienceModeSelectBody
+                            theme={theme}
+                            title="Apply response style"
+                            scope
+                            onClose={closePanel}
+                            onSelect={(scope) => {
+                              const mode = selectedExperienceMode()
+                              if (mode) props.onExperienceMode(mode, scope as "session_and_preference" | "session" | "next")
                               closePanel()
                             }}
                           />
@@ -826,6 +875,10 @@ export function RunFooterView(props: RunFooterViewProps) {
                 <box paddingLeft={1} paddingRight={1} backgroundColor={theme().statusAccent} flexShrink={0}>
                   <text wrapMode="none" truncate>
                     <span style={{ fg: modeColor(), bold: true }}>{modeLabel()}</span>
+                    <Show when={!shell() && !exiting()}>
+                      <span style={{ fg: theme().muted }}> · </span>
+                      <span style={{ fg: experienceModeColor() }}>{experienceModeLabel()}</span>
+                    </Show>
                   </text>
                 </box>
 
