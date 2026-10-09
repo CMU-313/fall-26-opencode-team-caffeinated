@@ -34,8 +34,6 @@ The automated tests are located in [the app response-style test](packages/app/sr
 
 Together, these tests cover loading the saved default and safely falling back when it cannot be read; applying a one-prompt choice to normal, queued, shell, and custom-command submissions; the API's default, session-only, and session-and-default persistence behavior; and the instructions sent to the provider for all three styles. They also verify that temporary styles are not persisted, continue across tool turns, and revert for the following prompt, plus that the terminal command menu displays the response-style control. This covers each scope, persistence boundary, and provider-facing behavior introduced by the change; the manual checklist covers the visible app and terminal interactions.
 
-
-
 # Interactive and Responsive "Intro to OpenCode" Feature (Khushi Thaker)
 
 The Intro to OpenCode is an interactive guide in the terminal app. It walks new users through six steps for setting up and using OpenCode, so they don't have to work it out on their own. It checks off each step automatically when it can see the user has done it, using their real setup. It only adds explanations and tracks progress. It doesn't change what the model can do or how it behaves.
@@ -64,14 +62,14 @@ The Intro to OpenCode is an interactive guide in the terminal app. It walks new 
 
 ### The six steps
 
-| # | Step | Checks off when |
-|---|---|---|
-| 1 | Connect a model | A provider is connected. The free built-in models don't count, but a paid model does. |
-| 2 | Ask for what you want | The user has sent a message in this project. |
-| 3 | Point it at the right files | The project has an `AGENTS.md` or `CLAUDE.md` file, which `/init` creates. |
-| 4 | Plan first, then build | The user has opened the step. |
-| 5 | Review and undo | The user has opened the step. |
-| 6 | Manage your conversations | The project has more than one session. |
+| #   | Step                        | Checks off when                                                                       |
+| --- | --------------------------- | ------------------------------------------------------------------------------------- |
+| 1   | Connect a model             | A provider is connected. The free built-in models don't count, but a paid model does. |
+| 2   | Ask for what you want       | The user has sent a message in this project.                                          |
+| 3   | Point it at the right files | The project has an `AGENTS.md` or `CLAUDE.md` file, which `/init` creates.            |
+| 4   | Plan first, then build      | The user has opened the step.                                                         |
+| 5   | Review and undo             | The user has opened the step.                                                         |
+| 6   | Manage your conversations   | The project has more than one session.                                                |
 
 The intro always opens at the first unfinished step, or at step 1 when all six are done. Progress and the launch setting are saved between launches.
 
@@ -104,8 +102,6 @@ The 23 tests render the real intro in a test terminal and drive it with the keyb
 
 Together with the manual checklist above, these tests cover every way the intro opens, every step's completion rule, and every row a user can select.
 
-
-=======
 ## Debug mode for failed shell commands
 
 The session timeline can show a short, persistent checklist when a completed Bash
@@ -153,4 +149,3 @@ Run the focused suite from the app package:
 cd packages/app
 bun test --conditions=solid --preload ./happydom.ts src/pages/session/timeline/debug-mode.test.ts
 ```
->>>>>>> origin/main
