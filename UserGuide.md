@@ -102,7 +102,7 @@ The 23 tests render the real intro in a test terminal and drive it with the keyb
 
 Together with the manual checklist above, these tests cover every way the intro opens, every step's completion rule, and every row a user can select.
 
-## Debug mode for failed shell commands
+## Debug Mode for Failed Shell Commands (Sanika Jain)
 
 The session timeline can show a short, persistent checklist when a completed Bash
 tool call reports a non-zero exit code or recognizable assertion/exception output.
