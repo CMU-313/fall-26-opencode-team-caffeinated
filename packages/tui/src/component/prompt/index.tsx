@@ -45,6 +45,7 @@ import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { DialogSelect } from "../../ui/dialog-select"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
@@ -57,6 +58,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { useHomeSessionDestination } from "../../routes/home/session-destination"
 
 registerOpencodeSpinner()
 
@@ -160,7 +162,95 @@ export function Prompt(props: PromptProps) {
   const tuiConfig = useTuiConfig()
   const dialog = useDialog()
   const toast = useToast()
+  const homeDestination = useHomeSessionDestination()
+  const kv = useKV()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const session = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
+  const [experienceMode, setExperienceMode] = createSignal<"beginner" | "intermediate" | "expert">("intermediate")
+  const [nextPromptExperienceMode, setNextPromptExperienceMode] = createSignal<
+    "beginner" | "intermediate" | "expert" | undefined
+  >()
+  const [newSessionExperienceModeScope, setNewSessionExperienceModeScope] = createSignal<
+    "session" | "session_and_preference" | "next" | undefined
+  >()
+  createEffect(on(() => session()?.experienceMode, (value) => {
+    if (value) setExperienceMode(value)
+  }))
+  onMount(() => {
+    if (props.sessionID) return
+    const destination = homeDestination?.destination()
+    void sdk.client.session.experienceModePreference({
+      directory: destination?.type === "directory" ? destination.directory : paths.cwd,
+    }).then((result) => {
+      if (!result.error) setExperienceMode(result.data.experienceMode)
+    })
+  })
+  const selectExperienceMode = async (
+    value: "beginner" | "intermediate" | "expert",
+    scope: "session" | "session_and_preference",
+  ) => {
+    const previous = experienceMode()
+    setExperienceMode(value)
+    if (!props.sessionID) return
+    try {
+      const result = await sdk.client.session.update({
+        sessionID: props.sessionID,
+        directory: session()?.directory ?? paths.cwd,
+        experienceMode: value,
+        ...(scope === "session" ? { experienceModeScope: scope } : {}),
+      })
+      if (!result.error) {
+        return
+      }
+    } catch {}
+    setExperienceMode(previous)
+    toast.show({ message: "Unable to update response style", variant: "error" })
+  }
+  const chooseExperienceMode = () => {
+    dialog.replace(() => (
+      <DialogSelect
+        title="Response style"
+        current={experienceMode()}
+        options={[
+          { value: "beginner", title: "Beginner", description: "Detailed explanations for learning" },
+          { value: "intermediate", title: "Intermediate", description: "Balanced explanations and tradeoffs" },
+          { value: "expert", title: "Expert", description: "Concise, implementation-first responses" },
+        ]}
+        onSelect={(mode) => {
+          const options = [
+            { value: "session_and_preference", title: "For this and future sessions" },
+            { value: "session", title: "For this session only" },
+            { value: "next", title: "For the next prompt only" },
+          ]
+          dialog.replace(() => (
+            <DialogSelect
+              title="Apply response style"
+              options={options}
+              onSelect={(scope) => {
+                if (scope.value === "next") {
+                  setNextPromptExperienceMode(mode.value as "beginner" | "intermediate" | "expert")
+                  setNewSessionExperienceModeScope("next")
+                  dialog.clear()
+                  return
+                }
+                if (!props.sessionID) {
+                  setExperienceMode(mode.value as "beginner" | "intermediate" | "expert")
+                  setNewSessionExperienceModeScope(scope.value as "session" | "session_and_preference")
+                  dialog.clear()
+                  return
+                }
+                void selectExperienceMode(
+                  mode.value as "beginner" | "intermediate" | "expert",
+                  scope.value as "session" | "session_and_preference",
+                )
+                dialog.clear()
+              }}
+            />
+          ))
+        }}
+      />
+    ))
+  }
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -170,7 +260,6 @@ export function Prompt(props: PromptProps) {
   const exit = useExit()
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
-  const kv = useKV()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -533,6 +622,14 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Response style",
+        desc: "Choose how detailed responses should be",
+        name: "prompt.style",
+        category: "Prompt",
+        slashName: "skill-mode",
+        run: chooseExperienceMode,
+      },
+      {
         title: "Warp",
         desc: "Change the workspace for the session",
         name: "workspace.set",
@@ -573,6 +670,7 @@ export function Prompt(props: PromptProps) {
       "prompt.stash.pop",
       "prompt.stash.list",
       "prompt.skills",
+      "prompt.style",
       "session.interrupt",
       "workspace.set",
       "session.move",
@@ -1006,6 +1104,7 @@ export function Prompt(props: PromptProps) {
           id: selectedModel.modelID,
           variant,
         },
+        ...(newSessionExperienceModeScope() === "session_and_preference" ? { experienceMode: experienceMode() } : {}),
       })
 
       if (res.error) {
@@ -1021,6 +1120,14 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+      if (newSessionExperienceModeScope() === "session") {
+        await sdk.client.session.update({
+          sessionID,
+          directory,
+          experienceMode: experienceMode(),
+          experienceModeScope: "session",
+        })
+      }
     }
 
     const inputText = expandTrackedPastedText(
@@ -1099,6 +1206,7 @@ export function Prompt(props: PromptProps) {
             agent: agent.name,
             model: selectedModel,
             variant,
+            ...(nextPromptExperienceMode() ? { experienceMode: nextPromptExperienceMode() } : {}),
             parts: [
               ...editorParts,
               {
@@ -1117,6 +1225,7 @@ export function Prompt(props: PromptProps) {
             variant: "error",
           })
         })
+      setNextPromptExperienceMode(undefined)
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
@@ -1454,6 +1563,19 @@ export function Prompt(props: PromptProps) {
                       </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          <text
+                            fg={fadeColor(
+                              experienceMode() === "beginner"
+                                ? theme.success
+                                : experienceMode() === "intermediate"
+                                  ? theme.warning
+                                  : theme.error,
+                              modelMetaAlpha(),
+                            )}
+                          >
+                            {Locale.titlecase(experienceMode())}
+                          </text>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text
                             flexShrink={0}

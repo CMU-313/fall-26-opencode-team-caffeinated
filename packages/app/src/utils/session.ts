@@ -18,6 +18,7 @@ export function normalizeSessionInfo(input: SessionInfo | Session): Session {
     agent: input.agent,
     model: input.model,
     version: "",
+    experienceMode: "intermediate",
     time: input.time,
     revert: input.revert && {
       messageID: input.revert.messageID,

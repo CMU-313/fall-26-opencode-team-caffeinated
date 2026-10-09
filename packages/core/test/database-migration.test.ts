@@ -280,6 +280,7 @@ describe("DatabaseMigration", () => {
               directory: "/project",
               title: "After",
               version: "test",
+              experienceMode: "intermediate" as const,
               time: { created: 1, updated: 2 },
             },
           }),
@@ -501,6 +502,7 @@ describe("DatabaseMigration", () => {
             path: "packages\\api",
             title: "Codec",
             version: "test",
+            experience_mode: "intermediate",
             time_created: 1,
             time_updated: 1,
           })

@@ -132,6 +132,7 @@ type RuntimeState = {
   switching?: Promise<void>
   demo?: ReturnType<typeof createRunDemo>
   selectSubagent?: (sessionID: string | undefined) => void
+  nextPromptExperienceMode?: "beginner" | "intermediate" | "expert"
   session?: Promise<void>
   stream?: Promise<StreamState>
 }
@@ -225,6 +226,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     return state.session
   }
 
+  const experienceMode = await (ctx.sessionID
+    ? ctx.sdk.session.get({ sessionID: ctx.sessionID }).then((result) => result.data?.experienceMode ?? "intermediate")
+    : ctx.sdk.session.experienceModePreference({ directory: ctx.directory }).then((result) => result.data?.experienceMode ?? "intermediate")
+  ).catch(() => "intermediate" as const)
   const shell = await (deps.createRuntimeLifecycle ?? createRuntimeLifecycle)({
     directory: ctx.directory,
     findFiles: (query) =>
@@ -244,6 +249,21 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     variant: state.activeVariant,
     tuiConfig,
     backgroundSubagents: input.backgroundSubagents,
+    experienceMode,
+    onExperienceMode: (mode, scope) => {
+      if (scope === "next") {
+        state.nextPromptExperienceMode = mode
+        return
+      }
+      void ensureSession()
+        .then(() => ctx.sdk.session.update({
+          sessionID: state.sessionID,
+          directory: ctx.directory,
+          experienceMode: mode,
+          ...(scope === "session" ? { experienceModeScope: scope } : {}),
+        }))
+        .catch(() => {})
+    },
     onPermissionReply: async (next) => {
       if (state.demo?.permission(next)) {
         return
@@ -643,6 +663,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         }
 
         await state.switching?.catch(() => {})
+        const experienceMode = prompt.experienceMode ?? state.nextPromptExperienceMode
+        state.nextPromptExperienceMode = undefined
 
         let outputAnchor: LocalReplayAnchor | undefined
         try {
@@ -651,7 +673,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             agent: state.agent,
             model: state.model,
             variant: state.activeVariant,
-            prompt,
+            prompt: experienceMode ? { ...prompt, experienceMode } : prompt,
             files: input.files,
             includeFiles,
             onVisibleOutput: (anchor) => {

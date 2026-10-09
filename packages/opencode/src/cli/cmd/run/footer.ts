@@ -92,6 +92,8 @@ type RunFooterOptions = {
   onCycleVariant?: () => CycleResult | void
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
+  experienceMode: "beginner" | "intermediate" | "expert"
+  onExperienceMode: (mode: "beginner" | "intermediate" | "expert", scope: "session_and_preference" | "session" | "next") => void
   onInterrupt?: () => void
   onBackground?: () => void
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
@@ -107,6 +109,7 @@ const SKILL_ROWS = RUN_COMMAND_PANEL_ROWS
 const SUBAGENT_ROWS = RUN_SUBAGENT_PANEL_ROWS
 const MODEL_ROWS = RUN_COMMAND_PANEL_ROWS
 const VARIANT_ROWS = RUN_COMMAND_PANEL_ROWS
+const EXPERIENCE_MODE_ROWS = RUN_COMMAND_PANEL_ROWS
 const NOTICE_DURATION = 3000
 const THEME_REFRESH_DELAYS = [1000, 1000] as const
 
@@ -191,6 +194,8 @@ export class RunFooter implements FooterApi {
   private variants: Accessor<string[]>
   private setVariants: Setter<string[]>
   private currentVariant: Accessor<string | undefined>
+  private experienceMode: Accessor<"beginner" | "intermediate" | "expert">
+  private setExperienceMode: Setter<"beginner" | "intermediate" | "expert">
   private setCurrentVariant: Setter<string | undefined>
   private theme: Accessor<RunTheme>
   private setTheme: Setter<RunTheme>
@@ -273,6 +278,9 @@ export class RunFooter implements FooterApi {
     const [currentVariant, setCurrentVariant] = createSignal(options.variant)
     this.currentVariant = currentVariant
     this.setCurrentVariant = setCurrentVariant
+    const [experienceMode, setExperienceMode] = createSignal(options.experienceMode)
+    this.experienceMode = experienceMode
+    this.setExperienceMode = setExperienceMode
     const [theme, setTheme] = createSignal(options.theme)
     this.theme = theme
     this.setTheme = setTheme
@@ -317,6 +325,11 @@ export class RunFooter implements FooterApi {
               currentModel: footer.currentModel,
               variants: footer.variants,
               currentVariant: footer.currentVariant,
+              experienceMode: footer.experienceMode,
+              onExperienceMode: (mode, scope) => {
+                if (scope !== "next") footer.setExperienceMode(mode)
+                options.onExperienceMode(mode, scope)
+              },
               theme: footer.theme,
               diffStyle: options.diffStyle,
               tuiConfig: options.tuiConfig,
@@ -708,6 +721,8 @@ export class RunFooter implements FooterApi {
                 ? 1 + MODEL_ROWS
                 : this.promptRoute.type === "variant"
                   ? 1 + VARIANT_ROWS
+                  : this.promptRoute.type === "experience-mode" || this.promptRoute.type === "experience-mode-scope"
+                    ? 1 + EXPERIENCE_MODE_ROWS
                   : this.promptRoute.type === "queued-menu"
                     ? 1 + this.subagentMenuRows
                     : this.promptRoute.type === "subagent-menu"
