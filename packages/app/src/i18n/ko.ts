@@ -1,4 +1,7 @@
+import { DEBUG_MODE_ENGLISH } from "./debug-mode"
+
 export const dict = {
+  ...DEBUG_MODE_ENGLISH,
   "command.category.suggested": "추천",
   "command.category.view": "보기",
   "command.category.project": "프로젝트",
