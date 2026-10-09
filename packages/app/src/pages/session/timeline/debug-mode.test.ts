@@ -45,4 +45,30 @@ describe("debug mode", () => {
 
     expect(readDebugProgress(storage, key)).toEqual({ enabled: true, completed: 2 })
   })
+
+  test("does not reuse progress between different failure signatures", () => {
+    expect(debugFailureKey(assertionFailure)).not.toBe(debugFailureKey({ ...assertionFailure, exit: 2 }))
+    expect(debugFailureKey(assertionFailure)).not.toBe(debugFailureKey(exceptionFailure))
+  })
+
+  test("normalizes invalid persisted progress", () => {
+    const storage = {
+      getItem: () => JSON.stringify({ enabled: "yes", completed: 2.9 }),
+    }
+
+    expect(readDebugProgress(storage, "invalid-enabled")).toEqual({ enabled: false, completed: 2 })
+    expect(
+      readDebugProgress(
+        {
+          getItem: () => "{not-json",
+        },
+        "malformed",
+      ),
+    ).toEqual({ enabled: false, completed: 0 })
+  })
+
+  test("allows a completed step to be unchecked", () => {
+    expect(advanceDebugStep({ enabled: true, completed: 2 }, 1)).toEqual({ enabled: true, completed: 1 })
+    expect(advanceDebugStep({ enabled: true, completed: 1 }, 2)).toEqual({ enabled: true, completed: 3 })
+  })
 })
