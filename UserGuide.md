@@ -149,3 +149,22 @@ Run the focused suite from the app package:
 cd packages/app
 bun test --conditions=solid --preload ./happydom.ts src/pages/session/timeline/debug-mode.test.ts
 ```
+
+# Unit Test Evaluation Subagent (Vidhya Vishwanath)
+The coverage agent is a tool that let's users find the aps within th test cases within the code that they write, and get coached through how to update their tests to make necessary changes for full test coverage.
+
+## Use it
+
+## Opening and Closing
+In the app, the user types /coverage and then the path to the file that they want to analyze coverage for, it is session dependent so the state isn't stored in a new session.
+
+It gives you test coverage ratings, then proposes the first issue to walk through. To leave the session, the user presses escape or redirects to a different conversation
+
+## What's Inside
+Once you point to your code to the file, the agent runs the bun test coverage to see which functions are not fully covered with your tests, and then, it ranks the gaps in order of importance, presenting them to the user. Then it takes the first gap and asks the user how they would approach fixing it, and gives them feedback on their approach.
+
+# Automated Verification
+
+The tests are in [packages/opencode/src/test/command/index.test.ts] subfolder that has unit and some integration tests for the coverage agent, where it checks whether it's registered as a built in command, resolves the correct path, and exposes the correct argument instead of giving the user the correct answer
+
+
