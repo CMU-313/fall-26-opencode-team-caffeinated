@@ -150,7 +150,7 @@ cd packages/app
 bun test --conditions=solid --preload ./happydom.ts src/pages/session/timeline/debug-mode.test.ts
 ```
 
-# Test Coverage Agent (Vidhya Vishwanath)
+# Unit Test Evaluation Subagent (Vidhya Vishwanath)
 The coverage agent is a tool that let's users find the aps within th test cases within the code that they write, and get coached through how to update their tests to make necessary changes for full test coverage.
 
 ## Use it
