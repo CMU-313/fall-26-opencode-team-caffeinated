@@ -167,6 +167,17 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_message_ledger\` (
+          \`message_id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`project_id\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`role\` text NOT NULL,
+          \`provider_id\` text,
+          \`model_id\` text
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_message\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
@@ -221,6 +232,23 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_usage_ledger\` (
+          \`part_id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`project_id\` text NOT NULL,
+          \`message_id\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`provider_id\` text,
+          \`model_id\` text,
+          \`cost\` real NOT NULL,
+          \`tokens_input\` integer NOT NULL,
+          \`tokens_output\` integer NOT NULL,
+          \`tokens_reasoning\` integer NOT NULL,
+          \`tokens_cache_read\` integer NOT NULL,
+          \`tokens_cache_write\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`todo\` (
           \`session_id\` text NOT NULL,
           \`content\` text NOT NULL,
@@ -264,6 +292,12 @@ export default {
         `CREATE UNIQUE INDEX \`session_input_session_promoted_seq_idx\` ON \`session_input\` (\`session_id\`,\`promoted_seq\`);`,
       )
       yield* tx.run(
+        `CREATE INDEX \`session_message_ledger_project_time_idx\` ON \`session_message_ledger\` (\`project_id\`,\`time_created\`);`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`session_message_ledger_model_idx\` ON \`session_message_ledger\` (\`provider_id\`,\`model_id\`);`,
+      )
+      yield* tx.run(
         `CREATE UNIQUE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
       )
       yield* tx.run(
@@ -276,6 +310,12 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_project_idx\` ON \`session\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`session_usage_ledger_project_time_idx\` ON \`session_usage_ledger\` (\`project_id\`,\`time_created\`);`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`session_usage_ledger_model_idx\` ON \`session_usage_ledger\` (\`provider_id\`,\`model_id\`);`,
+      )
       yield* tx.run(`CREATE INDEX \`todo_session_idx\` ON \`todo\` (\`session_id\`);`)
     })
   },

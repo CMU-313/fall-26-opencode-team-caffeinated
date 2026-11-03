@@ -1,19 +1,19 @@
 import { describe, expect, spyOn, test } from "bun:test"
 import { array, assert, asyncProperty, constant, integer, oneof, record, property } from "fast-check"
 import { Effect, Layer } from "effect"
-import { eq } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Session } from "@/session/session"
-import { MessageID, type SessionID } from "@/session/schema"
+import { MessageID, PartID, type SessionID } from "@/session/schema"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { testEffect } from "../lib/effect"
 import { aggregateSessionStats, displayStats } from "@/cli/cmd/stats"
@@ -94,6 +94,41 @@ const it = testEffect(
   ),
 )
 
+function recordUsage(session: Session.Interface, sessionID: SessionID, inputTokens: number, cost: number) {
+  const messageID = MessageID.ascending()
+  const tokens = {
+    input: inputTokens,
+    output: 0,
+    reasoning: 0,
+    cache: { read: 0, write: 0 },
+  }
+  return Effect.gen(function* () {
+    yield* session.updateMessage({
+      id: messageID,
+      sessionID,
+      role: "assistant",
+      time: { created: Date.now() },
+      parentID: messageID,
+      modelID: ModelV2.ID.make("test"),
+      providerID: ProviderV2.ID.make("test"),
+      mode: "test",
+      agent: "test",
+      path: { cwd: "/", root: "/" },
+      cost,
+      tokens,
+    })
+    yield* session.updatePart({
+      id: PartID.ascending(),
+      messageID,
+      sessionID,
+      type: "step-finish",
+      reason: "stop",
+      cost,
+      tokens,
+    })
+  })
+}
+
 describe("aggregate statistics", () => {
   // R1: Presentation flags must not change session or message counts.
   // Kind: invariant
@@ -160,7 +195,6 @@ describe("aggregate statistics", () => {
   // Kind: invariant
   it.instance("retains token and cost totals after deleting a session", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
       const session = yield* Session.Service
       const context = yield* Effect.context<Database.Service | Session.Service>()
       // Re-run the create, aggregate, delete, and aggregate sequence for each generated usage pair.
@@ -169,35 +203,26 @@ describe("aggregate statistics", () => {
           asyncProperty(usageArbitrary, async ({ baseTokens, addedTokens, baseCostCents, addedCostCents }) =>
             Effect.runPromiseWith<Database.Service | Session.Service>(context)(
               Effect.gen(function* () {
+                const initial = yield* aggregateSessionStats()
                 // Give one session baseline usage and the soon-to-be-deleted session additional usage.
                 const base = yield* session.create({})
                 const added = yield* session.create({})
-                yield* db
-                  .update(SessionTable)
-                  .set({ tokens_input: baseTokens, cost: baseCostCents / 100 })
-                  .where(eq(SessionTable.id, base.id))
-                  .run()
-                  .pipe(Effect.orDie)
-                yield* db
-                  .update(SessionTable)
-                  .set({ tokens_input: addedTokens, cost: addedCostCents / 100 })
-                  .where(eq(SessionTable.id, added.id))
-                  .run()
-                  .pipe(Effect.orDie)
+                yield* recordUsage(session, base.id, baseTokens, baseCostCents / 100)
+                yield* recordUsage(session, added.id, addedTokens, addedCostCents / 100)
 
                 const expectedTokens = baseTokens + addedTokens
                 const expectedCost = (baseCostCents + addedCostCents) / 100
 
                 // First confirm both sessions contribute before testing deletion retention.
                 const beforeDelete = yield* aggregateSessionStats()
-                expect(beforeDelete.totalTokens.input).toBe(expectedTokens)
-                expect(beforeDelete.totalCost).toBeCloseTo(expectedCost, 8)
+                expect(beforeDelete.totalTokens.input - initial.totalTokens.input).toBe(expectedTokens)
+                expect(beforeDelete.totalCost - initial.totalCost).toBeCloseTo(expectedCost, 8)
 
                 // Removing the added session must leave the combined totals intact.
                 yield* session.remove(added.id)
                 const afterDelete = yield* aggregateSessionStats()
-                expect(afterDelete.totalTokens.input).toBe(expectedTokens)
-                expect(afterDelete.totalCost).toBeCloseTo(expectedCost, 8)
+                expect(afterDelete.totalTokens.input).toBe(beforeDelete.totalTokens.input)
+                expect(afterDelete.totalCost).toBeCloseTo(beforeDelete.totalCost, 8)
 
                 yield* session.remove(base.id)
               }),
@@ -279,7 +304,6 @@ describe("aggregate statistics", () => {
   // Kind: invariant
   it.instance("never decreases token or message totals as sessions and messages are deleted", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
       const session = yield* Session.Service
       const context = yield* Effect.context<Database.Service | Session.Service>()
 
@@ -325,12 +349,7 @@ describe("aggregate statistics", () => {
                     created.push(item)
                     yield* expectMonotonic()
 
-                    yield* db
-                      .update(SessionTable)
-                      .set({ tokens_input: generated.tokens })
-                      .where(eq(SessionTable.id, info.id))
-                      .run()
-                      .pipe(Effect.orDie)
+                    yield* recordUsage(session, info.id, generated.tokens, 0)
                     yield* expectMonotonic()
 
                     for (let index = 0; index < generated.messages; index++) {

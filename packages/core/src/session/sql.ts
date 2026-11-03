@@ -105,6 +105,46 @@ export const PartTable = sqliteTable(
   ],
 )
 
+export const SessionMessageLedgerTable = sqliteTable(
+  "session_message_ledger",
+  {
+    message_id: text().$type<MessageID>().primaryKey(),
+    session_id: text().$type<SessionSchema.ID>().notNull(),
+    project_id: text().$type<ProjectV2.ID>().notNull(),
+    time_created: integer().notNull(),
+    role: text().notNull(),
+    provider_id: text(),
+    model_id: text(),
+  },
+  (table) => [
+    index("session_message_ledger_project_time_idx").on(table.project_id, table.time_created),
+    index("session_message_ledger_model_idx").on(table.provider_id, table.model_id),
+  ],
+)
+
+export const SessionUsageLedgerTable = sqliteTable(
+  "session_usage_ledger",
+  {
+    part_id: text().$type<PartID>().primaryKey(),
+    session_id: text().$type<SessionSchema.ID>().notNull(),
+    project_id: text().$type<ProjectV2.ID>().notNull(),
+    message_id: text().$type<MessageID>().notNull(),
+    time_created: integer().notNull(),
+    provider_id: text(),
+    model_id: text(),
+    cost: real().notNull(),
+    tokens_input: integer().notNull(),
+    tokens_output: integer().notNull(),
+    tokens_reasoning: integer().notNull(),
+    tokens_cache_read: integer().notNull(),
+    tokens_cache_write: integer().notNull(),
+  },
+  (table) => [
+    index("session_usage_ledger_project_time_idx").on(table.project_id, table.time_created),
+    index("session_usage_ledger_model_idx").on(table.provider_id, table.model_id),
+  ],
+)
+
 export const TodoTable = sqliteTable(
   "todo",
   {

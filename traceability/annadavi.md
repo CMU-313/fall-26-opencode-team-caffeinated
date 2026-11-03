@@ -19,7 +19,7 @@ Data Access: [packages/opencode/src/session/session.ts](../packages/opencode/src
 | R4 | S-8: “the top 3 [models] of the top 5 should be the same as the top 3”, O-9: “Well, the first three, I'm assuming, the first three outputted for the five. List of five will be the same as the ones that were listed for the list of three.” | The order of reported models should be consistent. | If stats are run with –models 3 then –models 5, the first 3 models and associated stats are identical in both. | | | |
 | R5 | O-13: “Well, if you have, you have the number of messages and the number of sessions. You know, like, if that's increasing, you're good there.”, S-6 “the message count should never go down” | Token/message count should never decrease. | If token count is recorded at any 2 points in time, it should have stayed the same or increased, regardless of what was done during that time (multiple sessions, 1 sessions, no sessions, deleted a session, deleted a message, etc.). | | | |
 
-Properties written or suggested by opencode or another AI tool: <list by requirement ID, or "none">
+Properties written or suggested by opencode or another AI tool: R1, R3, R4, R5
 
 ## Requirement changes
 
