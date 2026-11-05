@@ -34,6 +34,11 @@ export const Info = Schema.Struct({
 
 export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & { template: Promise<string> | string }
 
+// Match [Image N] as a single token, quoted strings, or non-space sequences.
+const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
+const placeholderRegex = /\$(\d+)/g
+const quoteTrimRegex = /^["']|["']$/g
+
 export function hints(template: string) {
   const result: string[] = []
   const numbered = template.match(/\$\d+/g)
@@ -42,6 +47,23 @@ export function hints(template: string) {
   }
   if (template.includes("$ARGUMENTS")) result.push("$ARGUMENTS")
   return result
+}
+
+export function resolve(template: string, input: string) {
+  const args = (input.match(argsRegex) ?? []).map((arg) => arg.replace(quoteTrimRegex, ""))
+  const placeholders = template.match(placeholderRegex) ?? []
+  const last = placeholders.reduce((highest, item) => Math.max(highest, Number(item.slice(1))), 0)
+  const withArgs = template.replaceAll(placeholderRegex, (_, index) => {
+    const position = Number(index)
+    const argIndex = position - 1
+    if (argIndex >= args.length) return ""
+    if (position === last) return args.slice(argIndex).join(" ")
+    return args[argIndex] ?? ""
+  })
+
+  if (template.includes("$ARGUMENTS")) return withArgs.replaceAll("$ARGUMENTS", input)
+  if (placeholders.length > 0 || !input.trim()) return withArgs
+  return `${withArgs}\n\n${input}`
 }
 
 export const Default = {
