@@ -1,17 +1,7 @@
-/** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import { testRender, useRenderer } from "@opentui/solid"
-import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
-import { createSignal, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
-import { TuiConfigProvider } from "../../src/config"
-import { OpencodeKeymapProvider } from "../../src/keymap"
 import introPlugin from "../../src/feature-plugins/home/intro"
-import { createBuiltinPlugins, type BuiltinTuiPlugin } from "../../src/feature-plugins/builtins"
-import { createTuiPluginApi } from "../fixture/tui-plugin"
-import { createTuiResolvedConfig } from "../fixture/tui-runtime"
-import { TestTuiContexts } from "../fixture/tui-environment"
+import { createBuiltinPlugins } from "../../src/feature-plugins/builtins"
+import { click, freshLaunch, renderIntro } from "../fixture/intro"
 
 // The intro auto-opens only once per launch (module state), so this test must run first
 test("opens on launch, and closing it only hides it until the next launch", async () => {
@@ -61,8 +51,8 @@ test("steps check off from the user's real setup and it opens at the first unfin
   try {
     intro.commands.get("intro.open")!.run?.({} as never)
     // Connected, one session, and AGENTS.md: steps 1-3 are done, so step 4 opens first.
-    // Opening step 4 counts as reading it, so it checks off too
-    await intro.app.waitForFrame((frame) => frame.includes("4/6 done"))
+    // The intro opening step 4 on its own doesn't count as the user reading it
+    await intro.app.waitForFrame((frame) => frame.includes("3/6 done"))
     const frame = intro.app.captureCharFrame()
     expect(frame).toContain("switch between two agents")
     expect(frame).not.toContain("free models")
@@ -227,8 +217,8 @@ test("a second session checks off the sessions step", async () => {
   const intro = await renderIntro({ provider: "anthropic", sessions: 2, files: ["AGENTS.md"] })
   try {
     intro.commands.get("intro.open")!.run?.({} as never)
-    // Steps 1, 2, 3, and 6 are verified; step 4 opens first and counts as read
-    await intro.app.waitForFrame((frame) => frame.includes("5/6 done"))
+    // Steps 1, 2, 3, and 6 are verified; step 4 opens first but isn't read until the user opens it
+    await intro.app.waitForFrame((frame) => frame.includes("4/6 done"))
 
     await click(intro.app, "Manage your conversations")
     await intro.app.waitForFrame((frame) => frame.includes("✓ Done. You have more than one session in this project."))
@@ -338,155 +328,3 @@ test("Start over with nothing verified just says progress was cleared", async ()
 test("the intro is registered as a built-in plugin", () => {
   expect(createBuiltinPlugins({ experimentalEventSystem: false })).toContain(introPlugin)
 })
-
-// The intro auto-opens only once per process, so launch tests load their own copy of the module
-async function freshLaunch(name: string): Promise<BuiltinTuiPlugin> {
-  const module: { default: BuiltinTuiPlugin } = await import(`../../src/feature-plugins/home/intro.tsx?${name}`)
-  return module.default
-}
-
-async function click(app: Awaited<ReturnType<typeof testRender>>, text: string) {
-  const lines = app.captureCharFrame().split("\n")
-  const y = lines.findIndex((line) => line.includes(text))
-  expect(y).toBeGreaterThanOrEqual(0)
-  await app.mockMouse.click(lines[y].indexOf(text), y)
-  await app.renderOnce()
-}
-
-async function renderIntro(input: {
-  provider?: string
-  paid?: boolean
-  sessions?: number
-  files?: string[]
-  filesFail?: boolean
-  firstLaunch?: boolean
-  hideOnLaunch?: boolean
-  dialogOpen?: boolean
-  plugin?: BuiltinTuiPlugin
-}) {
-  const commands = new Map<
-    string,
-    NonNullable<Parameters<TuiPluginApi["keymap"]["registerLayer"]>[0]["commands"]>[number]
-  >()
-  const dispatched: string[] = []
-  const toasts: string[] = []
-  const [dialog, setDialog] = createSignal<{ render: () => JSX.Element; onClose?: () => void } | undefined>(
-    input.dialogOpen ? { render: () => <text>Another dialog</text> } : undefined,
-  )
-  let homeBottom: (() => JSX.Element) | undefined
-  let fileListInput: unknown
-  // Reactive like the real KV store, so the intro re-renders when progress is saved or cleared
-  // Other tests open the intro themselves, so stop it auto-opening even when a test runs alone
-  const [values, setValues] = createStore<Record<string, unknown>>(
-    input.firstLaunch && !input.hideOnLaunch ? {} : { intro_hide_on_launch: true },
-  )
-  const kv = {
-    get: (name: string, fallback?: unknown) => (name in values ? values[name] : fallback),
-    set: (name: string, value: unknown) => setValues(name, value),
-    ready: true,
-  } as TuiPluginApi["kv"]
-  const config = createTuiResolvedConfig()
-
-  function Harness() {
-    const keymap = createDefaultOpenTuiKeymap(useRenderer())
-    const registerLayer = keymap.registerLayer.bind(keymap)
-    keymap.registerLayer = (layer) => {
-      layer.commands?.forEach((command) => commands.set(command.name, command))
-      return registerLayer(layer)
-    }
-    keymap.dispatchCommand = ((name: string) => {
-      dispatched.push(name)
-    }) as typeof keymap.dispatchCommand
-    const base = createTuiPluginApi({
-      keymap,
-      client: {
-        file: {
-          list: async (params: unknown) => {
-            fileListInput = params
-            if (input.filesFail) throw new Error("file list unavailable")
-            return { data: (input.files ?? []).map((name) => ({ name })) }
-          },
-        },
-      } as unknown as TuiPluginApi["client"],
-    })
-    const api = {
-      ...base,
-      kv,
-      state: {
-        ...base.state,
-        provider: input.provider
-          ? [{ id: input.provider, models: { model: { cost: { input: input.paid ? 3 : 0 } } } }]
-          : [],
-        session: { ...base.state.session, count: () => input.sessions ?? 0 },
-      },
-      slots: {
-        register(plugin: { slots: { home_bottom?: () => JSX.Element } }) {
-          homeBottom = plugin.slots.home_bottom
-          return "intro"
-        },
-      },
-      ui: {
-        ...base.ui,
-        toast(toast: { message: string }) {
-          toasts.push(toast.message)
-        },
-        dialog: {
-          ...base.ui.dialog,
-          replace(render: () => JSX.Element, onClose?: () => void) {
-            setDialog({ render, onClose })
-          },
-          clear() {
-            dialog()?.onClose?.()
-            setDialog(undefined)
-          },
-          get open() {
-            return dialog() !== undefined
-          },
-        },
-      },
-    } as unknown as TuiPluginApi
-
-    void (input.plugin ?? introPlugin).tui(api, undefined, pluginMeta)
-
-    return (
-      <TestTuiContexts>
-        <OpencodeKeymapProvider keymap={keymap}>
-          <TuiConfigProvider config={config}>
-            <box>
-              {homeBottom?.()}
-              {dialog()?.render()}
-            </box>
-          </TuiConfigProvider>
-        </OpencodeKeymapProvider>
-      </TestTuiContexts>
-    )
-  }
-
-  const app = await testRender(() => <Harness />, { width: 100, height: 60 })
-  await app.waitFor(() => commands.has("intro.open"))
-  return {
-    app,
-    commands,
-    dispatched,
-    toasts,
-    kv,
-    close: () => {
-      dialog()?.onClose?.()
-      setDialog(undefined)
-    },
-    fileListInput: () => fileListInput,
-  }
-}
-
-const pluginMeta = {
-  id: "internal:home-intro",
-  source: "internal",
-  spec: "internal:home-intro",
-  target: "internal:home-intro",
-  first_time: 0,
-  last_time: 0,
-  time_changed: 0,
-  load_count: 1,
-  fingerprint: "test",
-  state: "same",
-} satisfies TuiPluginMeta
