@@ -41,6 +41,8 @@ export async function renderIntro(input: {
   plugin?: BuiltinTuiPlugin
   // Settings saved by an earlier run, used to simulate restarting OpenCode
   stored?: Record<string, unknown>
+  // Rendered above the home screen, e.g. stand-ins for the controls the tour spotlights
+  extra?: () => JSX.Element
 }) {
   const commands = new Map<
     string,
@@ -149,6 +151,7 @@ export async function renderIntro(input: {
         <OpencodeKeymapProvider keymap={keymap}>
           <TuiConfigProvider config={config}>
             <box>
+              {input.extra?.()}
               {homeBottom?.()}
               {dialog()?.render()}
             </box>
