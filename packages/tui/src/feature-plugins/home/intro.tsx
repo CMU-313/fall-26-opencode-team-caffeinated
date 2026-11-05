@@ -155,11 +155,6 @@ function Intro(props: { api: TuiPluginApi }) {
     { kind: "reset" as const, step: -1 },
   ])
 
-  createEffect(() => {
-    if (expanded() < 0 || read().includes(expanded())) return
-    props.api.kv.set("intro_read", [...read(), expanded()])
-  })
-
   const select = (index: number) => {
     const row = rows()[index]
     setSelected(index)
@@ -182,7 +177,11 @@ function Intro(props: { api: TuiPluginApi }) {
       setSelected(0)
       return setExpanded(0)
     }
-    setExpanded(expanded() === row.step ? -1 : row.step)
+    if (expanded() === row.step) return setExpanded(-1)
+    // Only a step the user opens counts as read. The step the intro opens on its own does not, or every
+    // restart would check off one more step without the user doing anything
+    if (!read().includes(row.step)) props.api.kv.set("intro_read", [...read(), row.step])
+    setExpanded(row.step)
   }
 
   useBindings(() => ({
@@ -232,7 +231,7 @@ function Intro(props: { api: TuiPluginApi }) {
               return (
                 <text fg={color(theme().textMuted)} onMouseOver={hover} onMouseUp={click}>
                   {prefix()}
-                  {props.api.kv.get("intro_hide_on_launch", false) ? "☐" : "☑"} Show this when OpenCode starts
+                  {props.api.kv.get("intro_hide_on_launch", false) ? "☐" : "☑"} Show this when OpenCode starts (enter to toggle)
                 </text>
               )
             if (row.kind === "reset")
