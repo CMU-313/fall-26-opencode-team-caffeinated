@@ -59,6 +59,7 @@ import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
+import { Spotlight } from "../../ui/spotlight"
 
 registerOpencodeSpinner()
 
@@ -1577,13 +1578,17 @@ export function Prompt(props: PromptProps) {
                             {Locale.titlecase(experienceMode())}
                           </text>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
-                          <text
-                            flexShrink={0}
-                            fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
-                          >
-                            {local.model.parsed().model}
-                          </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                          <Spotlight id="model">
+                            <box flexDirection="row" gap={1}>
+                              <text
+                                flexShrink={0}
+                                fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
+                              >
+                                {local.model.parsed().model}
+                              </text>
+                              <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                            </box>
+                          </Spotlight>
                           <Show when={showVariant()}>
                             <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
                             <text>

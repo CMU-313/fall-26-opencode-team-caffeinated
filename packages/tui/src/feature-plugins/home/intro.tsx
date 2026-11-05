@@ -1,9 +1,10 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { TextAttributes, type RGBA } from "@opentui/core"
-import { createEffect, createMemo, createResource, createSignal, For, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, onCleanup, Show, untrack } from "solid-js"
 import { useBindings, useCommandShortcut } from "../../keymap"
 import { Link } from "../../ui/link"
+import { setSpotlight } from "../../ui/spotlight"
 
 const id = "internal:home-intro"
 
@@ -26,6 +27,7 @@ export const STEPS = [
       because: "You've connected a provider.",
       done: (progress: Progress) => progress.connected,
     },
+    spotlight: undefined,
     question: "Do I need to pay for a model?",
     answer:
       "No. The free models work without signing in to anything. If you already pay for something like Claude, ChatGPT, or GitHub Copilot, connect that account with `/connect` and use those models instead.",
@@ -39,6 +41,7 @@ export const STEPS = [
       because: "You've sent a message in this project.",
       done: (progress: Progress) => progress.sessions > 0,
     },
+    spotlight: undefined,
     question: "What makes a good request?",
     answer:
       'Say what to change, where, and how you will know it worked. For example: "In src/cart.ts, make applyDiscount ignore negative numbers and add a test for it." If it misunderstands, just reply with a correction, like you would to a person.',
@@ -52,6 +55,7 @@ export const STEPS = [
       because: "This project already has an AGENTS.md file.",
       done: (progress: Progress) => progress.instructions,
     },
+    spotlight: undefined,
     question: "What does /init do?",
     answer:
       "It looks through your project and writes an AGENTS.md file describing how it is built and how to run it. OpenCode reads that file at the start of every session, so it makes fewer wrong guesses. Commit it so your teammates get the same benefit.",
@@ -61,6 +65,7 @@ export const STEPS = [
     body: "Press `tab` to switch between two agents. Plan can only read and suggest, so it is safe for exploring ideas. Build can edit files and run commands. A good habit: talk the idea through in Plan, then switch to Build to make the change.",
     tryIt: { label: "See the agents", command: "agent.list" },
     verify: undefined,
+    spotlight: undefined,
     question: "When should I use Plan instead of Build?",
     answer:
       "Use Plan when you are not sure what to do yet, like understanding unfamiliar code or comparing two approaches. It can't change files, so nothing breaks. Switch to Build once you know what you want.",
@@ -70,6 +75,7 @@ export const STEPS = [
     body: "Read the changes OpenCode shows you before moving on. If you don't like them, `/undo` rolls back the last message and its file changes, and `/redo` puts them back.",
     tryIt: undefined,
     verify: undefined,
+    spotlight: undefined,
     question: "Can /undo take back everything?",
     answer:
       "It reverts the file edits in your project. It can't take back things that happened outside your project, like a `git push` or a message sent to another service, so read those commands before letting them run.",
@@ -83,9 +89,30 @@ export const STEPS = [
       because: "You have more than one session in this project.",
       done: (progress: Progress) => progress.sessions > 1,
     },
+    spotlight: undefined,
     question: "When should I start a new session?",
     answer:
       "Whenever you switch to a different task. A long conversation about one feature can confuse OpenCode when you ask about something unrelated. Old sessions are saved, so you can always go back with `/sessions`.",
+  },
+  {
+    title: "Switch model",
+    body: "The highlighted label under the prompt shows which model answers you. Run `/models` to switch, for example to a faster model for small edits or a stronger one for hard problems.",
+    tryIt: { label: "Open /models", command: "model.list" },
+    verify: undefined,
+    spotlight: "model",
+    question: "Does switching models lose my conversation?",
+    answer:
+      "No. The session keeps its history, and the next message goes to the new model. Switch whenever a task needs a different trade-off between speed and quality.",
+  },
+  {
+    title: "Connect an MCP server",
+    body: "MCP servers give OpenCode extra tools, like searching your issue tracker or querying a database. Add one under `mcp` in your opencode.json. Its status shows in the highlighted spot at the bottom of the home screen, and `/mcps` lists them.",
+    tryIt: { label: "Open /mcps", command: "mcp.list" },
+    verify: undefined,
+    spotlight: "mcp",
+    question: "Do I need an MCP server?",
+    answer:
+      "No. OpenCode can already read, edit, and run code without one. Add a server when you want it to reach something outside your project, like GitHub issues or your team's docs.",
   },
 ]
 
@@ -184,10 +211,25 @@ function Intro(props: { api: TuiPluginApi }) {
     setExpanded(row.step)
   }
 
+  // Open the next step and move the selection onto it
+  const advance = () => {
+    const next = Math.min(expanded() + 1, STEPS.length - 1)
+    setAnswered(false)
+    setExpanded(next)
+    // Every step above the open one is folded, so its row index is its step index.
+    // Reading rows() here can return the list from before the update when the keymap batches the command
+    setSelected(next)
+  }
+
+  // Highlight the control the open step is about; the tour closing clears it
+  createEffect(() => setSpotlight(STEPS[expanded()]?.spotlight))
+  onCleanup(() => setSpotlight(undefined))
+
   useBindings(() => ({
     bindings: [
       { key: "up", desc: "Previous", group: "Intro", cmd: () => setSelected((i) => Math.max(0, i - 1)) },
       { key: "down", desc: "Next", group: "Intro", cmd: () => setSelected((i) => Math.min(rows().length - 1, i + 1)) },
+      { key: "right", desc: "Next step", group: "Intro", cmd: advance },
       { key: "return", desc: "Open", group: "Intro", cmd: () => select(selected()) },
     ],
   }))
@@ -292,6 +334,14 @@ function Intro(props: { api: TuiPluginApi }) {
             )
           }}
         </For>
+        <box flexDirection="row" gap={4} paddingTop={1} paddingLeft={2}>
+          <text fg={theme().primary} attributes={TextAttributes.BOLD} onMouseUp={advance}>
+            Next →
+          </text>
+          <text fg={theme().textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
+            Skip tour
+          </text>
+        </box>
       </box>
 
       <box>
@@ -320,7 +370,7 @@ function Intro(props: { api: TuiPluginApi }) {
       </box>
 
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme().textMuted}>↑↓ move · enter open · reopen anytime with /intro</text>
+        <text fg={theme().textMuted}>↑↓ move · → next step · enter open · reopen anytime with /intro</text>
         <Link href="https://opencode.ai/docs" fg={theme().textMuted}>
           opencode.ai/docs
         </Link>
@@ -360,11 +410,15 @@ const tui: TuiPlugin = async (api) => {
     order: 50,
     slots: {
       home_bottom() {
-        // Show the intro every time OpenCode starts, unless the user turned that off in the intro
+        // Show the intro when OpenCode starts, unless the user turned that off in the intro
         createEffect(() => {
           if (autoOpened || !api.kv.ready) return
           autoOpened = true
-          if (!api.kv.get("intro_hide_on_launch", false) && !api.ui.dialog.open) open(api)
+          if (api.kv.get("intro_hide_on_launch", false) || api.ui.dialog.open) return
+          // vvishwan (R1): show the tour only on the first launch. Turning the launch setting off as soon as it opens
+          // means closing it at any step still counts as seen; re-checking the launch row or /intro brings it back
+          api.kv.set("intro_hide_on_launch", true)
+          open(api)
         })
         return (
           <box paddingTop={2} flexShrink={0}>

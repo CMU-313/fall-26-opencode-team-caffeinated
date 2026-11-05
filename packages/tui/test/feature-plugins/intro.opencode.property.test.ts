@@ -78,7 +78,7 @@ async function openIntro(input: Parameters<typeof renderIntro>[0]) {
 // The N/6 counter plus which steps show a checkmark
 function progressShown(frame: string) {
   return {
-    done: frame.match(/(\d)\/6 done/)?.[1],
+    done: frame.match(new RegExp(`(\\d)/${STEPS.length} done`))?.[1],
     checked: STEPS.map((step) => frame.split("\n").find((line) => line.includes(step.title))?.includes("✓")),
   }
 }
