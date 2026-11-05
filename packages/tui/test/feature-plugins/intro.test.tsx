@@ -7,6 +7,8 @@ import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
 import { createSignal, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TuiConfigProvider } from "../../src/config"
+import { KVProvider } from "../../src/context/kv"
+import { ThemeProvider } from "../../src/context/theme"
 import { OpencodeKeymapProvider } from "../../src/keymap"
 import introPlugin from "../../src/feature-plugins/home/intro"
 import { createBuiltinPlugins, type BuiltinTuiPlugin } from "../../src/feature-plugins/builtins"
@@ -14,8 +16,7 @@ import { createTuiPluginApi } from "../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { TestTuiContexts } from "../fixture/tui-environment"
 
-// The intro auto-opens only once per launch (module state), so this test must run first
-test("opens on launch, and closing it only hides it until the next launch", async () => {
+test("opens on the first launch and saves that it was seen", async () => {
   const intro = await renderIntro({ firstLaunch: true })
   try {
     await intro.app.waitForFrame((frame) => frame.includes("Welcome to OpenCode"))
@@ -24,7 +25,7 @@ test("opens on launch, and closing it only hides it until the next launch", asyn
     intro.close()
     await intro.app.renderOnce()
     expect(intro.app.captureCharFrame()).not.toContain("Welcome to OpenCode")
-    expect(intro.kv.get("intro_hide_on_launch", false)).toBe(false)
+    expect(intro.kv.get("intro_seen", false)).toBe(true)
   } finally {
     intro.app.renderer.destroy()
   }
@@ -49,7 +50,7 @@ test("a new user starts at step 1 and sees it is not done yet", async () => {
     intro.commands.get("intro.open")!.run?.({} as never)
     await intro.app.waitForFrame((frame) => frame.includes("Not done yet"))
     const frame = intro.app.captureCharFrame()
-    expect(frame).toContain("0/6 done")
+    expect(frame).toContain("0/8 done")
     expect(frame).toContain("free models")
     expect(frame).toContain("checks off when you connect a provider")
   } finally {
@@ -63,7 +64,7 @@ test("steps check off from the user's real setup and it opens at the first unfin
     intro.commands.get("intro.open")!.run?.({} as never)
     // Connected, one session, and AGENTS.md: steps 1-3 are done, so step 4 opens first.
     // Opening step 4 counts as reading it, so it checks off too
-    await intro.app.waitForFrame((frame) => frame.includes("4/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("4/8 done"))
     const frame = intro.app.captureCharFrame()
     expect(frame).toContain("switch between two agents")
     expect(frame).not.toContain("free models")
@@ -77,7 +78,7 @@ test("the built-in free models don't count as a connected provider", async () =>
   const intro = await renderIntro({ provider: "opencode" })
   try {
     intro.commands.get("intro.open")!.run?.({} as never)
-    await intro.app.waitForFrame((frame) => frame.includes("0/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("0/8 done"))
     expect(intro.app.captureCharFrame()).toContain("checks off when you connect a provider")
   } finally {
     intro.app.renderer.destroy()
@@ -117,22 +118,22 @@ test("clicking a common question shows its answer", async () => {
   }
 })
 
-test("the launch row turns the pop-up on and off", async () => {
+test("the launch row asks for the tour again on the next launch, and can take that back", async () => {
   const intro = await renderIntro({})
   try {
     intro.commands.get("intro.open")!.run?.({} as never)
-    await intro.app.waitForFrame((frame) => frame.includes("Show this when OpenCode starts"))
+    await intro.app.waitForFrame((frame) => frame.includes("Show this next time OpenCode starts"))
 
     // The launch row sits just above "Start over", the last row
     intro.app.mockInput.pressKeys([...Array.from({ length: 20 }, () => "\x1b[B"), "\x1b[A"])
-    await intro.app.waitForFrame((frame) => frame.includes("› ☐ Show this when OpenCode starts"))
+    await intro.app.waitForFrame((frame) => frame.includes("› ☐ Show this next time OpenCode starts"))
     intro.app.mockInput.pressEnter()
-    await intro.app.waitForFrame((frame) => frame.includes("› ☑ Show this when OpenCode starts"))
-    expect(intro.kv.get("intro_hide_on_launch", true)).toBe(false)
+    await intro.app.waitForFrame((frame) => frame.includes("› ☑ Show this next time OpenCode starts"))
+    expect(intro.kv.get("intro_seen", true)).toBe(false)
 
     intro.app.mockInput.pressEnter()
-    await intro.app.waitForFrame((frame) => frame.includes("› ☐ Show this when OpenCode starts"))
-    expect(intro.kv.get("intro_hide_on_launch", false)).toBe(true)
+    await intro.app.waitForFrame((frame) => frame.includes("› ☐ Show this next time OpenCode starts"))
+    expect(intro.kv.get("intro_seen", false)).toBe(true)
   } finally {
     intro.app.renderer.destroy()
   }
@@ -144,13 +145,13 @@ test("Start over clears the read checkmarks, keeps real setup, and says why", as
     // Steps 1 and 3 are verified from the provider and AGENTS.md; steps 4 and 5 were only read
     intro.kv.set("intro_read", [3, 4])
     intro.commands.get("intro.open")!.run?.({} as never)
-    await intro.app.waitForFrame((frame) => frame.includes("4/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("4/8 done"))
 
     // "Start over" is the last row
     intro.app.mockInput.pressKeys(Array.from({ length: 20 }, () => "\x1b[B"))
     await intro.app.waitForFrame((frame) => frame.includes("› ↺ Start over"))
     intro.app.mockInput.pressEnter()
-    await intro.app.waitForFrame((frame) => frame.includes("2/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("2/8 done"))
 
     expect(intro.app.captureCharFrame()).toContain("✓ Done. You've connected a provider.")
     expect(intro.toasts).toEqual([
@@ -163,7 +164,7 @@ test("Start over clears the read checkmarks, keeps real setup, and says why", as
   }
 })
 
-test("turning off the launch pop-up keeps it closed on the next launch", async () => {
+test("once the tour has been seen, the next launch stays closed", async () => {
   const intro = await renderIntro({ plugin: await freshLaunch("off"), firstLaunch: true, hideOnLaunch: true })
   try {
     await intro.app.waitForFrame((frame) => frame.includes("New to OpenCode"))
@@ -203,7 +204,7 @@ test("if the file list fails, it still opens and the AGENTS.md step stays unchec
   const intro = await renderIntro({ filesFail: true })
   try {
     intro.commands.get("intro.open")!.run?.({} as never)
-    await intro.app.waitForFrame((frame) => frame.includes("0/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("0/8 done"))
 
     await click(intro.app, "Point it at the right files")
     await intro.app.waitForFrame((frame) => frame.includes("checks off when your project has an AGENTS.md"))
@@ -217,7 +218,7 @@ test("a CLAUDE.md file counts the same as AGENTS.md", async () => {
   try {
     intro.commands.get("intro.open")!.run?.({} as never)
     // Connected and CLAUDE.md: steps 1 and 3 are done, so step 2 opens first
-    await intro.app.waitForFrame((frame) => frame.includes("2/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("2/8 done"))
     expect(intro.app.captureCharFrame()).toContain("Type in the prompt box")
   } finally {
     intro.app.renderer.destroy()
@@ -229,7 +230,7 @@ test("a second session checks off the sessions step", async () => {
   try {
     intro.commands.get("intro.open")!.run?.({} as never)
     // Steps 1, 2, 3, and 6 are verified; step 4 opens first and counts as read
-    await intro.app.waitForFrame((frame) => frame.includes("5/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("5/8 done"))
 
     await click(intro.app, "Manage your conversations")
     await intro.app.waitForFrame((frame) => frame.includes("✓ Done. You have more than one session in this project."))
@@ -243,19 +244,19 @@ test("a paid model from the built-in provider counts as connected", async () => 
   try {
     intro.commands.get("intro.open")!.run?.({} as never)
     // Step 1 is done, so step 2 opens first
-    await intro.app.waitForFrame((frame) => frame.includes("1/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("1/8 done"))
     expect(intro.app.captureCharFrame()).toContain("Type in the prompt box")
   } finally {
     intro.app.renderer.destroy()
   }
 })
 
-test("when every step is done it shows 6/6 and opens at step 1", async () => {
+test("when every step is done it shows 8/8 and opens at step 1", async () => {
   const intro = await renderIntro({ provider: "anthropic", sessions: 2, files: ["AGENTS.md"] })
   try {
-    intro.kv.set("intro_read", [3, 4])
+    intro.kv.set("intro_read", [3, 4, 6, 7])
     intro.commands.get("intro.open")!.run?.({} as never)
-    await intro.app.waitForFrame((frame) => frame.includes("6/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("8/8 done"))
     expect(intro.app.captureCharFrame()).toContain("✓ Done. You've connected a provider.")
   } finally {
     intro.app.renderer.destroy()
@@ -326,10 +327,10 @@ test("Start over with nothing verified just says progress was cleared", async ()
   try {
     intro.kv.set("intro_read", [3, 4])
     intro.commands.get("intro.open")!.run?.({} as never)
-    await intro.app.waitForFrame((frame) => frame.includes("2/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("2/8 done"))
 
     await click(intro.app, "Start over")
-    await intro.app.waitForFrame((frame) => frame.includes("0/6 done"))
+    await intro.app.waitForFrame((frame) => frame.includes("0/8 done"))
     expect(intro.toasts).toEqual(["Progress cleared."])
   } finally {
     intro.app.renderer.destroy()
@@ -382,12 +383,12 @@ test(
 )
 
 test(
-  "R2: enter, the right arrow, and the Next button each move to the next step",
+  "R2: the right arrow and clicking Next each move to the next step",
   async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.nat({ max: 7 }),
-        fc.array(fc.constantFrom<TourInput>("enter", "right", "next"), { minLength: 1, maxLength: 8 }),
+        fc.array(fc.constantFrom<TourInput>("right", "next"), { minLength: 1, maxLength: 8 }),
         async (start, inputs) => {
           const intro = await openTour({})
           try {
@@ -418,7 +419,7 @@ test(
     const extra = await spotlightTargets()
     await fc.assert(
       fc.asyncProperty(
-        fc.array(fc.constantFrom<TourInput>("enter", "right", "next"), { maxLength: 9 }),
+        fc.array(fc.constantFrom<TourInput>("right", "next"), { maxLength: 9 }),
         async (inputs) => {
           const intro = await openTour({ extra })
           try {
@@ -495,19 +496,20 @@ const SPOTLIGHT: Record<string, string | undefined> = {
   "Connect an MCP server": "mcp",
 }
 
-type TourInput = "enter" | "right" | "next"
+type TourInput = "right" | "next"
 
 // A new user opens the tour with /intro and lands on step 1
 async function openTour(input: Parameters<typeof renderIntro>[0]) {
   const intro = await renderIntro(input)
   intro.commands.get("intro.open")!.run?.({} as never)
   await intro.app.waitForFrame((frame) => tourSteps(frame).open === 0)
+  // The spotlight stand-ins wait for the theme to load, which can land a frame after the tour
+  if (input.extra) await intro.app.waitForFrame((frame) => frame.includes("MCP-CONTROL"))
   return intro
 }
 
 async function press(app: Awaited<ReturnType<typeof testRender>>, input: TourInput) {
   if (input === "next") return click(app, "Next →")
-  if (input === "enter") app.mockInput.pressEnter()
   if (input === "right") app.mockInput.pressArrow("right")
   await app.renderOnce()
 }
@@ -525,14 +527,18 @@ function tourSteps(frame: string) {
 async function spotlightTargets() {
   const { Spotlight } = await import("../../src/ui/spotlight")
   return () => (
-    <box>
-      <Spotlight id="model">
-        <text fg="#ffffff">MODEL-SELECTOR</text>
-      </Spotlight>
-      <Spotlight id="mcp">
-        <text fg="#ffffff">MCP-CONTROL</text>
-      </Spotlight>
-    </box>
+    <KVProvider>
+      <ThemeProvider mode="dark">
+        <box>
+          <Spotlight id="model">
+            <text fg="#ffffff">MODEL-SELECTOR</text>
+          </Spotlight>
+          <Spotlight id="mcp">
+            <text fg="#ffffff">MCP-CONTROL</text>
+          </Spotlight>
+        </box>
+      </ThemeProvider>
+    </KVProvider>
   )
 }
 
@@ -602,7 +608,7 @@ async function renderIntro(input: {
   let homeBottom: (() => JSX.Element) | undefined
   let fileListInput: unknown
   // Other tests open the intro themselves, so stop it auto-opening even when a test runs alone
-  const kv = input.kv ?? createKv(input.firstLaunch && !input.hideOnLaunch ? {} : { intro_hide_on_launch: true })
+  const kv = input.kv ?? createKv(input.firstLaunch && !input.hideOnLaunch ? {} : { intro_seen: true })
   const config = createTuiResolvedConfig()
 
   function Harness() {
