@@ -14,9 +14,9 @@ const ABOUT =
   "OpenCode is an AI coding assistant that lives in your terminal. Tell it what you want in plain English and it reads your code, edits files, and runs commands for you. You can review and undo everything it does."
 
 // What OpenCode can see about the user's real setup
-type Progress = { connected: boolean; sessions: number; instructions: boolean }
+export type Progress ={ connected: boolean; sessions: number; instructions: boolean }
 
-const STEPS = [
+export const STEPS = [
   {
     title: "Connect a model",
     body: "OpenCode comes with a few free models so you can try it right away. For better results, run `/connect` to sign in to a provider like Anthropic, OpenAI, or GitHub Copilot. Then run `/models` to pick which one to use.",
@@ -89,6 +89,19 @@ const STEPS = [
   },
 ]
 
+// A verified step follows the user's real setup; any other step is done once it has been read
+export function isComplete(index: number, progress: Progress, read: number[]) {
+  return STEPS[index].verify?.done(progress) ?? read.includes(index)
+}
+
+// The intro opens at the first unfinished step, or step 1 when everything is done
+export function firstUnfinished(progress: Progress, read: number[]) {
+  return Math.max(
+    0,
+    STEPS.findIndex((_, index) => !isComplete(index, progress, read)),
+  )
+}
+
 // Auto-open once per launch, not every time the user comes back to the home screen
 let autoOpened = false
 
@@ -114,19 +127,12 @@ function Intro(props: { api: TuiPluginApi }) {
     sessions: props.api.state.session.count(),
     instructions: instructions() === true,
   }))
-  const complete = (index: number) => STEPS[index].verify?.done(progress()) ?? read().includes(index)
+  const complete = (index: number) => isComplete(index, progress(), read())
   const [expanded, setExpanded] = createSignal(-1)
   // Open at the first step the user hasn't done yet, once the AGENTS.md check has finished
   createEffect(() => {
     if (instructions.loading) return
-    untrack(() =>
-      setExpanded(
-        Math.max(
-          0,
-          STEPS.findIndex((_, index) => !complete(index)),
-        ),
-      ),
-    )
+    untrack(() => setExpanded(firstUnfinished(progress(), read())))
   })
   const [answered, setAnswered] = createSignal(false)
   const [selected, setSelected] = createSignal(0)
