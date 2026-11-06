@@ -1,11 +1,13 @@
 import { describe, expect, spyOn, test } from "bun:test"
 import { array, assert, asyncProperty, constant, integer, oneof, record, property } from "fast-check"
 import { Effect, Layer } from "effect"
+import { inArray } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionUsageLedgerTable } from "@opencode-ai/core/session/sql"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { InstanceStore } from "@/project/instance-store"
@@ -72,8 +74,7 @@ const monotonicCountsArbitrary = array(
   { minLength: 0, maxLength: 5 },
 )
 
-// Provide the database, session, and event services used by integration tests;
-// testEffect runs each case with an isolated Effect test environment.
+// Keep ledger writes in memory so property runs never pollute the user's stats database.
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
@@ -86,6 +87,7 @@ const it = testEffect(
     ]),
     [
       [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces: false })],
+      [Database.node, Database.layerFromPath(":memory:")],
       [
         InstanceBootstrap.node,
         Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
@@ -204,11 +206,20 @@ describe("aggregate statistics", () => {
             Effect.runPromiseWith<Database.Service | Session.Service>(context)(
               Effect.gen(function* () {
                 const initial = yield* aggregateSessionStats()
+                const database = yield* Database.Service
                 // Give one session baseline usage and the soon-to-be-deleted session additional usage.
                 const base = yield* session.create({})
                 const added = yield* session.create({})
                 yield* recordUsage(session, base.id, baseTokens, baseCostCents / 100)
                 yield* recordUsage(session, added.id, addedTokens, addedCostCents / 100)
+                const ledgerRows = yield* database.db
+                  .select({ time_created: SessionUsageLedgerTable.time_created })
+                  .from(SessionUsageLedgerTable)
+                  .where(inArray(SessionUsageLedgerTable.session_id, [base.id, added.id]))
+                  .all()
+                  .pipe(Effect.orDie)
+                expect(ledgerRows).toHaveLength(2)
+                expect(ledgerRows.every((row) => row.time_created > 1_577_836_800_000)).toBe(true)
 
                 const expectedTokens = baseTokens + addedTokens
                 const expectedCost = (baseCostCents + addedCostCents) / 100
