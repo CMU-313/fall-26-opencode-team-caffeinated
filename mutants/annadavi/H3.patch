@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/cli/cmd/stats.ts b/packages/opencode/src/cli/cmd/stats.ts
+index 9095ded..33889fd 100644
+--- a/packages/opencode/src/cli/cmd/stats.ts
++++ b/packages/opencode/src/cli/cmd/stats.ts
+@@ -360,7 +360,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
+     console.log("│                      MODEL USAGE                       │")
+     console.log("├────────────────────────────────────────────────────────┤")
+ 
+-    for (const [model, usage] of modelsToDisplay) {
++    for (const [model, usage] of modelsToDisplay.toReversed()) {
+       console.log(`│ ${model.padEnd(54)} │`)
+       console.log(renderRow("  Messages", usage.messages.toLocaleString()))
+       console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))
