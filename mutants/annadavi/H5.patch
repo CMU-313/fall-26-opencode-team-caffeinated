@@ -2,12 +2,8 @@ diff --git a/packages/opencode/src/cli/cmd/stats.ts b/packages/opencode/src/cli/
 index 9095ded..5468f36 100644
 --- a/packages/opencode/src/cli/cmd/stats.ts
 +++ b/packages/opencode/src/cli/cmd/stats.ts
-@@ -360,7 +360,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
-     console.log("│                      MODEL USAGE                       │")
-     console.log("├────────────────────────────────────────────────────────┤")
+@@ -356,3 +356,3 @@
+     const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
+-    const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)
++    const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(-modelLimit)
  
--    for (const [model, usage] of modelsToDisplay) {
-+    for (const [model, usage] of [modelsToDisplay[-1]].concat(modelsToDisplay.slice(0, -1))) {
-       console.log(`│ ${model.padEnd(54)} │`)
-       console.log(renderRow("  Messages", usage.messages.toLocaleString()))
-       console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))

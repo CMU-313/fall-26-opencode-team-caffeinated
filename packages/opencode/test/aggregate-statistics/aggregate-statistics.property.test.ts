@@ -1,5 +1,16 @@
 import { describe, expect, spyOn, test } from "bun:test"
-import { array, assert, asyncProperty, constant, integer, oneof, record, property } from "fast-check"
+import {
+  array,
+  assert,
+  asyncProperty,
+  constant,
+  integer,
+  oneof,
+  record,
+  property,
+  uniqueArray,
+  configureGlobal,
+} from "fast-check"
 import { Effect, Layer } from "effect"
 import { inArray } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -7,7 +18,10 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionUsageLedgerTable } from "@opencode-ai/core/session/sql"
+import {
+  SessionMessageLedgerTable,
+  SessionUsageLedgerTable,
+} from "@opencode-ai/core/session/sql"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { InstanceStore } from "@/project/instance-store"
@@ -20,6 +34,8 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { testEffect } from "../lib/effect"
 import { aggregateSessionStats, displayStats } from "@/cli/cmd/stats"
 
+configureGlobal({ seed: 42 })
+
 // R1: Generate overview counts, models, and tools alongside optional display
 // limits so both absent and present --models/--tools flags are exercised.
 // The same model data feeds the R4 ordering property below.
@@ -30,6 +46,26 @@ const modelUsageArbitrary = record({
   cacheReadTokens: integer({ min: 0, max: 100_000 }),
   cacheWriteTokens: integer({ min: 0, max: 100_000 }),
   costCents: integer({ min: 0, max: 100_000 }),
+})
+
+const tokenCountsArbitrary = record({
+  input: integer({ min: 0, max: 1_000_000 }),
+  output: integer({ min: 0, max: 1_000_000 }),
+  reasoning: integer({ min: 0, max: 1_000_000 }),
+  cache: record({
+    read: integer({ min: 0, max: 1_000_000 }),
+    write: integer({ min: 0, max: 1_000_000 }),
+  }),
+})
+
+const positiveTokenCountsArbitrary = record({
+  input: integer({ min: 1, max: 1_000_000 }),
+  output: integer({ min: 1, max: 1_000_000 }),
+  reasoning: integer({ min: 1, max: 1_000_000 }),
+  cache: record({
+    read: integer({ min: 1, max: 1_000_000 }),
+    write: integer({ min: 1, max: 1_000_000 }),
+  }),
 })
 
 // R1: Pair generated overview totals with generated model/tool data and flag
@@ -46,29 +82,42 @@ const overviewFlagsArbitrary = record({
 // R3: Generate a valid zero-or-positive baseline and additional positive usage
 // for the session that will be deleted; costs in cents avoid float noise.
 const usageArbitrary = record({
-  baseTokens: integer({ min: 0, max: 1_000_000 }),
-  addedTokens: integer({ min: 1, max: 1_000_000 }),
+  baseTokens: tokenCountsArbitrary,
+  addedTokens: positiveTokenCountsArbitrary,
   baseCostCents: integer({ min: 0, max: 100_000 }),
   addedCostCents: integer({ min: 1, max: 100_000 }),
 })
 
-// R4: Generate at least two model entries and two increasing limits, constrained
-// so each displayed prefix exists in the generated model list.
-const modelOrderingArbitrary = array(modelUsageArbitrary, { minLength: 2, maxLength: 10 }).chain((models) =>
-  integer({ min: 1, max: models.length - 1 }).chain((firstLimit) =>
-    integer({ min: firstLimit + 1, max: models.length }).map((secondLimit) => ({
-      models,
-      firstLimit,
-      secondLimit,
-    })),
-  ),
-)
+// R4: Distinct ascending insertion counts force the displayed top-model order
+// to differ from insertion order, while limits always select valid prefixes.
+const modelOrderingArbitrary = uniqueArray(integer({ min: 1, max: 100 }), { minLength: 2, maxLength: 10 })
+  .map((messages) =>
+    [...messages]
+      .sort((a, b) => a - b)
+      .map((count, index) => ({
+        messages: count,
+        inputTokens: index + 1,
+        outputTokens: index + 2,
+        cacheReadTokens: index + 3,
+        cacheWriteTokens: index + 4,
+        costCents: index + 5,
+      })),
+  )
+  .chain((models) =>
+    integer({ min: 1, max: models.length - 1 }).chain((firstLimit) =>
+      integer({ min: firstLimit + 1, max: models.length }).map((secondLimit) => ({
+        models,
+        firstLimit,
+        secondLimit,
+      })),
+    ),
+  )
 
 // R5: Generate empty or multi-session histories with positive tokens per
 // session and zero-or-more messages, including boundary cases for both totals.
 const monotonicCountsArbitrary = array(
   record({
-    tokens: integer({ min: 1, max: 1_000_000 }),
+    tokens: positiveTokenCountsArbitrary,
     messages: integer({ min: 0, max: 3 }),
   }),
   { minLength: 0, maxLength: 5 },
@@ -96,14 +145,18 @@ const it = testEffect(
   ),
 )
 
-function recordUsage(session: Session.Interface, sessionID: SessionID, inputTokens: number, cost: number) {
+function recordUsage(
+  session: Session.Interface,
+  sessionID: SessionID,
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cache: { read: number; write: number }
+  },
+  cost: number,
+) {
   const messageID = MessageID.ascending()
-  const tokens = {
-    input: inputTokens,
-    output: 0,
-    reasoning: 0,
-    cache: { read: 0, write: 0 },
-  }
   return Effect.gen(function* () {
     yield* session.updateMessage({
       id: messageID,
@@ -177,10 +230,16 @@ describe("aggregate statistics", () => {
 
           displayStats(stats)
           const withoutFlags = overviewCounts()
+          expect(withoutFlags).toHaveLength(2)
+          expect(withoutFlags[0]).toContain(totalSessions.toLocaleString())
+          expect(withoutFlags[1]).toContain(totalMessages.toLocaleString())
           log.mockClear()
 
           displayStats(stats, toolLimit, modelLimit)
           const withFlags = overviewCounts()
+          expect(withFlags).toHaveLength(2)
+          expect(withFlags[0]).toContain(totalSessions.toLocaleString())
+          expect(withFlags[1]).toContain(totalMessages.toLocaleString())
           log.mockClear()
 
           expect(withFlags).toEqual(withoutFlags)
@@ -221,18 +280,34 @@ describe("aggregate statistics", () => {
                 expect(ledgerRows).toHaveLength(2)
                 expect(ledgerRows.every((row) => row.time_created > 1_577_836_800_000)).toBe(true)
 
-                const expectedTokens = baseTokens + addedTokens
+                const expectedTokens = {
+                  input: baseTokens.input + addedTokens.input,
+                  output: baseTokens.output + addedTokens.output,
+                  reasoning: baseTokens.reasoning + addedTokens.reasoning,
+                  cache: {
+                    read: baseTokens.cache.read + addedTokens.cache.read,
+                    write: baseTokens.cache.write + addedTokens.cache.write,
+                  },
+                }
                 const expectedCost = (baseCostCents + addedCostCents) / 100
 
                 // First confirm both sessions contribute before testing deletion retention.
                 const beforeDelete = yield* aggregateSessionStats()
-                expect(beforeDelete.totalTokens.input - initial.totalTokens.input).toBe(expectedTokens)
+                expect(beforeDelete.totalTokens.input - initial.totalTokens.input).toBe(expectedTokens.input)
+                expect(beforeDelete.totalTokens.output - initial.totalTokens.output).toBe(expectedTokens.output)
+                expect(beforeDelete.totalTokens.reasoning - initial.totalTokens.reasoning).toBe(expectedTokens.reasoning)
+                expect(beforeDelete.totalTokens.cache.read - initial.totalTokens.cache.read).toBe(expectedTokens.cache.read)
+                expect(beforeDelete.totalTokens.cache.write - initial.totalTokens.cache.write).toBe(expectedTokens.cache.write)
                 expect(beforeDelete.totalCost - initial.totalCost).toBeCloseTo(expectedCost, 8)
 
                 // Removing the added session must leave the combined totals intact.
                 yield* session.remove(added.id)
                 const afterDelete = yield* aggregateSessionStats()
                 expect(afterDelete.totalTokens.input).toBe(beforeDelete.totalTokens.input)
+                expect(afterDelete.totalTokens.output).toBe(beforeDelete.totalTokens.output)
+                expect(afterDelete.totalTokens.reasoning).toBe(beforeDelete.totalTokens.reasoning)
+                expect(afterDelete.totalTokens.cache.read).toBe(beforeDelete.totalTokens.cache.read)
+                expect(afterDelete.totalTokens.cache.write).toBe(beforeDelete.totalTokens.cache.write)
                 expect(afterDelete.totalCost).toBeCloseTo(beforeDelete.totalCost, 8)
 
                 yield* session.remove(base.id)
@@ -245,9 +320,101 @@ describe("aggregate statistics", () => {
     }),
   )
 
-  // R4: Increasing the generated model limit must preserve the displayed prefix.
+  // R6: Both append-only ledgers must honor the requested time window.
+  // Inserting one recent and one out-of-window row exercises non-empty filters
+  // and proves old activity is excluded independently for messages and usage.
+  it.instance("filters message and usage ledger rows by the requested time window", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const database = yield* Database.Service
+      const info = yield* session.create({})
+      const before = yield* aggregateSessionStats(1)
+      const recentTime = Date.now()
+      const oldTime = recentTime - 3 * 24 * 60 * 60 * 1000
+      const oldMessageID = MessageID.ascending()
+      const recentMessageID = MessageID.ascending()
+      const oldPartID = PartID.ascending()
+      const recentPartID = PartID.ascending()
+
+      yield* database.db
+        .insert(SessionMessageLedgerTable)
+        .values([
+          {
+            message_id: oldMessageID,
+            session_id: info.id,
+            project_id: info.projectID,
+            time_created: oldTime,
+            role: "assistant",
+            provider_id: "test",
+            model_id: "test",
+          },
+          {
+            message_id: recentMessageID,
+            session_id: info.id,
+            project_id: info.projectID,
+            time_created: recentTime,
+            role: "assistant",
+            provider_id: "test",
+            model_id: "test",
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* database.db
+        .insert(SessionUsageLedgerTable)
+        .values([
+          {
+            part_id: oldPartID,
+            session_id: info.id,
+            project_id: info.projectID,
+            message_id: oldMessageID,
+            time_created: oldTime,
+            provider_id: "test",
+            model_id: "test",
+            cost: 0.23,
+            tokens_input: 23,
+            tokens_output: 29,
+            tokens_reasoning: 31,
+            tokens_cache_read: 37,
+            tokens_cache_write: 41,
+          },
+          {
+            part_id: recentPartID,
+            session_id: info.id,
+            project_id: info.projectID,
+            message_id: recentMessageID,
+            time_created: recentTime,
+            provider_id: "test",
+            model_id: "test",
+            cost: 0.07,
+            tokens_input: 7,
+            tokens_output: 11,
+            tokens_reasoning: 13,
+            tokens_cache_read: 17,
+            tokens_cache_write: 19,
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      const after = yield* aggregateSessionStats(1)
+      expect(after.totalMessages - before.totalMessages).toBe(1)
+      expect(after.totalCost - before.totalCost).toBeCloseTo(0.07, 8)
+      expect(after.totalTokens.input - before.totalTokens.input).toBe(7)
+      expect(after.totalTokens.output - before.totalTokens.output).toBe(11)
+      expect(after.totalTokens.reasoning - before.totalTokens.reasoning).toBe(13)
+      expect(after.totalTokens.cache.read - before.totalTokens.cache.read).toBe(17)
+      expect(after.totalTokens.cache.write - before.totalTokens.cache.write).toBe(19)
+
+      yield* session.remove(info.id)
+    }),
+  )
+
+  // R4: Models are ranked by message count, limits select the top prefix, and
+  // model details are shown only when requested and available.
   // Kind: metamorphic
-  test("keeps model order and stats unchanged when increasing the model limit", () => {
+  test("displays ranked top models and preserves their prefix when increasing the limit", () => {
     // Capture terminal writes too; displayStats uses one to repair the model-section border.
     const write = spyOn(process.stdout, "write").mockImplementation(() => true)
     const log = spyOn(console, "log").mockImplementation(() => {})
@@ -260,6 +427,12 @@ describe("aggregate statistics", () => {
             line.startsWith(`│${label}`),
           ),
       )
+    const modelNames = (lines: string[]) =>
+      lines
+        .filter((line) => line.startsWith("│ model-"))
+        .map((line) => line.replace(/^│\s*/, "").replace(/\s*│$/, "").trim())
+    const hasModelSection = () =>
+      log.mock.calls.some(([line]) => String(line).includes("MODEL USAGE"))
 
     try {
       assert(
@@ -291,17 +464,42 @@ describe("aggregate statistics", () => {
             tokensPerSession: 0,
             medianTokensPerSession: 0,
           }
+          const rankedModelNames = models
+            .map((usage, index) => ({ name: `model-${index}`, messages: usage.messages }))
+            .sort((a, b) => b.messages - a.messages)
+            .map((usage) => usage.name)
 
-          // The smaller-limit output must be an unchanged prefix of the larger one.
+          // Model details stay hidden unless a limit was requested.
+          displayStats(stats)
+          expect(hasModelSection()).toBe(false)
+          log.mockClear()
+
+          // A finite limit must show exactly the highest-ranked entries.
           displayStats(stats, undefined, firstLimit)
-          const firstModels = modelLines(log.mock.calls.map(([line]) => String(line)))
+          const firstOutput = log.mock.calls.map(([line]) => String(line))
+          const firstModels = modelLines(firstOutput)
+          const firstNames = modelNames(firstOutput)
+          expect(hasModelSection()).toBe(true)
+          expect(firstNames).toHaveLength(firstLimit)
+          expect(firstNames).toEqual(rankedModelNames.slice(0, firstLimit))
           log.mockClear()
 
           displayStats(stats, undefined, secondLimit)
-          const moreModels = modelLines(log.mock.calls.map(([line]) => String(line)))
+          const secondOutput = log.mock.calls.map(([line]) => String(line))
+          const moreModels = modelLines(secondOutput)
+          const secondNames = modelNames(secondOutput)
+          expect(hasModelSection()).toBe(true)
+          expect(secondNames).toHaveLength(secondLimit)
+          expect(secondNames).toEqual(rankedModelNames.slice(0, secondLimit))
           log.mockClear()
 
+          // Increasing the limit appends models without changing earlier details.
           expect(moreModels.slice(0, firstModels.length)).toEqual(firstModels)
+
+          // An empty model map should not render an empty model-usage section.
+          displayStats({ ...stats, modelUsage: {} }, undefined, secondLimit)
+          expect(hasModelSection()).toBe(false)
+          log.mockClear()
         }),
         { numRuns: 50 },
       )
@@ -334,20 +532,18 @@ describe("aggregate statistics", () => {
                   const snapshot = () =>
                     Effect.gen(function* () {
                       const stats = yield* aggregateSessionStats()
-                      const tokens =
-                        stats.totalTokens.input +
-                        stats.totalTokens.output +
-                        stats.totalTokens.reasoning +
-                        stats.totalTokens.cache.read +
-                        stats.totalTokens.cache.write
-                      return { tokens, messages: stats.totalMessages }
+                      return { tokens: stats.totalTokens, messages: stats.totalMessages }
                     })
 
                   // Start from existing totals so each generated example is independent of earlier archived usage.
                   let previous = yield* snapshot()
                   const expectMonotonic = Effect.fnUntraced(function* () {
                     const current = yield* snapshot()
-                    expect(current.tokens).toBeGreaterThanOrEqual(previous.tokens)
+                    expect(current.tokens.input).toBeGreaterThanOrEqual(previous.tokens.input)
+                    expect(current.tokens.output).toBeGreaterThanOrEqual(previous.tokens.output)
+                    expect(current.tokens.reasoning).toBeGreaterThanOrEqual(previous.tokens.reasoning)
+                    expect(current.tokens.cache.read).toBeGreaterThanOrEqual(previous.tokens.cache.read)
+                    expect(current.tokens.cache.write).toBeGreaterThanOrEqual(previous.tokens.cache.write)
                     expect(current.messages).toBeGreaterThanOrEqual(previous.messages)
                     previous = current
                   })

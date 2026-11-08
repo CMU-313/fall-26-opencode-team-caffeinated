@@ -2,12 +2,8 @@ diff --git a/packages/opencode/src/cli/cmd/stats.ts b/packages/opencode/src/cli/
 index 9095ded..a3fb83a 100644
 --- a/packages/opencode/src/cli/cmd/stats.ts
 +++ b/packages/opencode/src/cli/cmd/stats.ts
-@@ -326,7 +326,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
-   console.log("┌────────────────────────────────────────────────────────┐")
-   console.log("│                       OVERVIEW                         │")
+@@ -328,3 +328,3 @@
    console.log("├────────────────────────────────────────────────────────┤")
 -  console.log(renderRow("Sessions", stats.totalSessions.toLocaleString()))
-+  console.log(renderRow("Sessions", modelLimit ? modelLimit.toLocaleString() : stats.totalSessions.toLocaleString()))
++  console.log(renderRow("Sessions", (modelLimit === undefined ? stats.totalSessions : Object.keys(stats.modelUsage).length).toLocaleString()))
    console.log(renderRow("Messages", stats.totalMessages.toLocaleString()))
-   console.log(renderRow("Days", stats.days.toString()))
-   console.log("└────────────────────────────────────────────────────────┘")

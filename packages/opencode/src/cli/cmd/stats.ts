@@ -142,7 +142,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
   const messageRows = yield* db
     .select()
     .from(SessionMessageLedgerTable)
-    .where(messageConditions.length > 0 ? and(...messageConditions) : undefined)
+    .where(and(...messageConditions))
     .all()
     .pipe(Effect.orDie)
 
@@ -152,7 +152,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* 
   const usageRows = yield* db
     .select()
     .from(SessionUsageLedgerTable)
-    .where(usageConditions.length > 0 ? and(...usageConditions) : undefined)
+    .where(and(...usageConditions))
     .all()
     .pipe(Effect.orDie)
 
@@ -354,7 +354,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   // Model Usage section
   if (modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
     const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
-    const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)
+    const modelsToDisplay = sortedModels.slice(0, modelLimit)
 
     console.log("┌────────────────────────────────────────────────────────┐")
     console.log("│                      MODEL USAGE                       │")

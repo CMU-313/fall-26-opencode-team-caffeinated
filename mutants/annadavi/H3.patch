@@ -2,12 +2,8 @@ diff --git a/packages/opencode/src/cli/cmd/stats.ts b/packages/opencode/src/cli/
 index 9095ded..33889fd 100644
 --- a/packages/opencode/src/cli/cmd/stats.ts
 +++ b/packages/opencode/src/cli/cmd/stats.ts
-@@ -360,7 +360,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
-     console.log("│                      MODEL USAGE                       │")
-     console.log("├────────────────────────────────────────────────────────┤")
- 
--    for (const [model, usage] of modelsToDisplay) {
-+    for (const [model, usage] of modelsToDisplay.toReversed()) {
-       console.log(`│ ${model.padEnd(54)} │`)
-       console.log(renderRow("  Messages", usage.messages.toLocaleString()))
-       console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))
+@@ -355,3 +355,3 @@
+   if (modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
+-    const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
++    const sortedModels = Object.entries(stats.modelUsage).slice(0, modelLimit).sort(([, a], [, b]) => b.messages - a.messages)
+     const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)

@@ -2,20 +2,7 @@ diff --git a/packages/opencode/src/cli/cmd/stats.ts b/packages/opencode/src/cli/
 index 9095ded..dd5f90f 100644
 --- a/packages/opencode/src/cli/cmd/stats.ts
 +++ b/packages/opencode/src/cli/cmd/stats.ts
-@@ -8,6 +8,7 @@ import {
-   SessionMessageLedgerTable,
-   SessionTable,
-   SessionUsageLedgerTable,
-+  MessageTable,
- } from "@opencode-ai/core/session/sql"
- import { Project } from "@/project/project"
- import { ProjectV2 } from "@opencode-ai/core/project"
-@@ -141,7 +142,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function*
-   if (projectID !== undefined) messageConditions.push(eq(SessionMessageLedgerTable.project_id, projectID))
-   const messageRows = yield* db
-     .select()
--    .from(SessionMessageLedgerTable)
-+    .from(MessageTable)
-     .where(messageConditions.length > 0 ? and(...messageConditions) : undefined)
-     .all()
-     .pipe(Effect.orDie)
+@@ -283,2 +283,2 @@
+-  stats.totalMessages = messageRows.length
++  stats.totalMessages = messageRows.filter((message) => filteredSessions.some((session) => session.id === message.session_id)).length
+   const rangeDays = Math.max(1, Math.ceil((latestTime - earliestTime) / MS_IN_DAY))
