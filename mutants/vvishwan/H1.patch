@@ -1,0 +1,24 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index b12fef4..fc01663 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -217,6 +217,11 @@ function Intro(props: { api: TuiPluginApi }) {
+   createEffect(() => setSpotlight(STEPS[expanded()]?.spotlight))
+   onCleanup(() => setSpotlight(undefined))
+ 
++  // The tour counts as seen once the user reaches the last step
++  createEffect(() => {
++    if (expanded() === STEPS.length - 1) props.api.kv.set("intro_seen", true)
++  })
++
+   useBindings(() => ({
+     bindings: [
+       { key: "up", desc: "Previous", group: "Intro", cmd: () => setSelected((i) => Math.max(0, i - 1)) },
+@@ -406,7 +411,6 @@ const tui: TuiPlugin = async (api) => {
+         // Saved as soon as it opens, so closing it at any step still counts as seen
+         createEffect(() => {
+           if (!api.kv.ready || api.kv.get("intro_seen", false) || api.ui.dialog.open) return
+-          api.kv.set("intro_seen", true)
+           open(api)
+         })
+         return (
