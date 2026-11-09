@@ -34,6 +34,14 @@ export const Info = Schema.Struct({
 
 export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & { template: Promise<string> | string }
 
+type ConfiguredCommand = {
+  agent?: string
+  model?: string
+  description?: string
+  template: string
+  subtask?: boolean
+}
+
 // Match [Image N] as a single token, quoted strings, or non-space sequences.
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
@@ -64,6 +72,19 @@ export function resolve(template: string, input: string) {
   if (template.includes("$ARGUMENTS")) return withArgs.replaceAll("$ARGUMENTS", input)
   if (placeholders.length > 0 || !input.trim()) return withArgs
   return `${withArgs}\n\n${input}`
+}
+
+export function configured(name: string, command: ConfiguredCommand): Info {
+  return {
+    name,
+    agent: command.agent,
+    model: command.model,
+    description: command.description,
+    source: "command",
+    template: command.template,
+    subtask: command.subtask,
+    hints: hints(command.template),
+  }
 }
 
 export const Default = {
@@ -123,18 +144,7 @@ const layer = Layer.effect(
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
-        commands[name] = {
-          name,
-          agent: command.agent,
-          model: command.model,
-          description: command.description,
-          source: "command",
-          get template() {
-            return command.template
-          },
-          subtask: command.subtask,
-          hints: hints(command.template),
-        }
+        commands[name] = configured(name, command)
       }
 
       for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {

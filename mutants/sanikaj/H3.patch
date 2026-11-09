@@ -1,11 +1,11 @@
 diff --git a/packages/opencode/src/command/index.ts b/packages/opencode/src/command/index.ts
 --- a/packages/opencode/src/command/index.ts
 +++ b/packages/opencode/src/command/index.ts
-@@ -41,7 +41,7 @@ export function hints(template: string) {
-   const result: string[] = []
+@@ -43,6 +43,6 @@ export function hints(template: string) {
    const numbered = template.match(/\$\d+/g)
    if (numbered) {
 -    for (const match of [...new Set(numbered)].sort()) result.push(match)
 +    for (const match of numbered.sort()) result.push(match)
    }
    if (template.includes("$ARGUMENTS")) result.push("$ARGUMENTS")
+   return result

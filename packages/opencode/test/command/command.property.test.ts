@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import * as fc from "fast-check"
 import { Command } from "../../src/command"
 
+fc.configureGlobal({ seed: 42 })
+
 describe("command properties", () => {
   // R1: The command service exposes metadata for every discovered command.
   // Kind: invariant. Generated records cover each supported source and arbitrary names/descriptions.
@@ -33,12 +35,20 @@ describe("command properties", () => {
   test("R2: positional arguments are not dropped or reordered", () => {
     fc.assert(
       fc.property(
-        fc.string({ minLength: 1 }).filter((value) => !/\s|["']/.test(value)),
-        fc.string({ minLength: 1 }).filter((value) => !/\s|["']/.test(value)),
-        (first, second) => {
-          const result = Command.resolve("first=$1 second=$2", `${first} ${second}`)
+        fc.array(fc.string({ minLength: 1 }).filter((value) => !/\s|["']/.test(value)), { minLength: 2, maxLength: 5 }),
+        (args) => {
+          const result = Command.resolve("first=$1 rest=$2", args.join(" "))
 
-          expect(result).toBe(`first=${first} second=${second}`)
+          expect(result).toBe(`first=${args[0]} rest=${args.slice(1).join(" ")}`)
+        },
+      ),
+    )
+
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1 }).filter((value) => !/\s/.test(value)),
+        (input) => {
+          expect(Command.resolve("use the supplied input", input)).toBe(`use the supplied input\n\n${input}`)
         },
       ),
     )
@@ -51,7 +61,7 @@ describe("command properties", () => {
 
     fc.assert(
       fc.property(unrelatedText, unrelatedText, (prefix, suffix) => {
-        expect(Command.hints(`${prefix} $1 ${suffix} $2`)).toEqual(["$1", "$2"])
+        expect(Command.hints(`${prefix} $1 ${suffix} $1 $2`)).toEqual(["$1", "$2"])
       }),
     )
   })
@@ -61,12 +71,9 @@ describe("command properties", () => {
   test("R4: configured descriptions remain consistent with command metadata", () => {
     fc.assert(
       fc.property(fc.string({ minLength: 1 }), fc.string(), (name, description) => {
-        const command = Command.Info.make({
-          name,
+        const command = Command.configured(name, {
           description,
-          source: "command",
           template: "",
-          hints: [],
         })
 
         expect(command).toMatchObject({ name, description, source: "command" })
