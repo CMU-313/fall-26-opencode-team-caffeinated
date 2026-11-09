@@ -1,0 +1,25 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index b12fef4..0765213 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -116,6 +116,9 @@ const STEPS = [
+   },
+ ]
+ 
++// Whether the tour has already auto-opened, so it isn't shown again
++let seen = false
++
+ function open(api: TuiPluginApi) {
+   api.ui.dialog.replace(() => <Intro api={api} />)
+   api.ui.dialog.setSize("large")
+@@ -405,8 +408,8 @@ const tui: TuiPlugin = async (api) => {
+         // Show the tour once, on the first launch; after that only /intro (or re-checking the launch row) brings it back.
+         // Saved as soon as it opens, so closing it at any step still counts as seen
+         createEffect(() => {
+-          if (!api.kv.ready || api.kv.get("intro_seen", false) || api.ui.dialog.open) return
+-          api.kv.set("intro_seen", true)
++          if (!api.kv.ready || seen || api.ui.dialog.open) return
++          seen = true
+           open(api)
+         })
+         return (

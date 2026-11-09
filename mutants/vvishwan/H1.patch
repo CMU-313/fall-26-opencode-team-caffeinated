@@ -1,5 +1,3 @@
-diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
-index b12fef4..fc01663 100644
 --- a/packages/tui/src/feature-plugins/home/intro.tsx
 +++ b/packages/tui/src/feature-plugins/home/intro.tsx
 @@ -217,6 +217,11 @@ function Intro(props: { api: TuiPluginApi }) {
