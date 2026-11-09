@@ -46,6 +46,69 @@ describe("command properties", () => {
 
     fc.assert(
       fc.property(
+        fc.record({
+          first: fc.string({ minLength: 1 }).filter((value) => !/\s|["']/.test(value)),
+          second: fc.string({ minLength: 1 }).filter((value) => !/\s|["']/.test(value)),
+          quoted: fc.string({ minLength: 2 }).filter((value) => !/["'\r\n]/.test(value)),
+        }),
+        ({ first, second, quoted }) => {
+          for (const quote of ['"', "'"]) {
+            expect(Command.resolve("first=$1 rest=$2", `${quote}${quoted}${quote} ${first} ${second}`)).toBe(
+              `first=${quoted} rest=${first} ${second}`,
+            )
+          }
+        },
+      ),
+    )
+
+    fc.assert(
+      fc.property(fc.string({ minLength: 1 }).filter((value) => !/[\s"'\r\n]/.test(value)), (value) => {
+        expect(Command.resolve("value=$1", `"${value}'"`)).toBe(`value=${value}'`)
+        expect(Command.resolve("value=$1", `'${value}"'`)).toBe(`value=${value}"`)
+      }),
+    )
+
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 999 }), fc.integer({ min: 1, max: 3 }), (imageNumber, spaces) => {
+        expect(Command.resolve("image=$1", `[Image${" ".repeat(spaces)}${imageNumber}]`)).toBe(
+          `image=[Image${" ".repeat(spaces)}${imageNumber}]`,
+        )
+      }),
+    )
+
+    fc.assert(
+      fc.property(
+        fc.array(fc.string({ minLength: 1 }).filter((value) => !/\s|["']/.test(value)), { minLength: 10, maxLength: 12 }),
+        (args) => {
+          expect(Command.resolve("tenth=$10", args.join(" "))).toBe(`tenth=${args.slice(9).join(" ")}`)
+        },
+      ),
+    )
+
+    fc.assert(
+      fc.property(
+        fc.string().filter((value) => !/\r|\n/.test(value)),
+        (input) => {
+          expect(Command.resolve("all=$ARGUMENTS", input)).toBe(`all=${input}`)
+        },
+      ),
+    )
+
+    fc.assert(
+      fc.property(fc.constantFrom("", " ", "  "), (input) => {
+        expect(Command.resolve("plain template", input)).toBe("plain template")
+        expect(Command.resolve("missing=$1", input)).toBe("missing=")
+      }),
+    )
+
+    fc.assert(
+      fc.property(fc.string(), (input) => {
+        expect(Command.resolve("$ARGUMENTS", input)).toBe(input)
+      }),
+    )
+
+    fc.assert(
+      fc.property(
         fc.string({ minLength: 1 }).filter((value) => !/\s/.test(value)),
         (input) => {
           expect(Command.resolve("use the supplied input", input)).toBe(`use the supplied input\n\n${input}`)
@@ -62,6 +125,24 @@ describe("command properties", () => {
     fc.assert(
       fc.property(unrelatedText, unrelatedText, (prefix, suffix) => {
         expect(Command.hints(`${prefix} $1 ${suffix} $1 $2`)).toEqual(["$1", "$2"])
+      }),
+    )
+
+    fc.assert(
+      fc.property(unrelatedText, unrelatedText, (prefix, suffix) => {
+        expect(Command.hints(`${prefix} $10 ${suffix} $2 $ARGUMENTS $10`)).toEqual(["$10", "$2", "$ARGUMENTS"])
+      }),
+    )
+
+    fc.assert(
+      fc.property(unrelatedText, unrelatedText, (prefix, suffix) => {
+        expect(Command.hints(`${prefix} $2 ${suffix} $10 $1`)).toEqual(["$1", "$10", "$2"])
+      }),
+    )
+
+    fc.assert(
+      fc.property(unrelatedText, unrelatedText, (prefix, suffix) => {
+        expect(Command.hints(`${prefix}$ARGUMENTS${suffix}`)).toEqual(["$ARGUMENTS"])
       }),
     )
   })
