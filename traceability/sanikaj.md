@@ -19,7 +19,7 @@ Properties written or suggested by opencode or another AI tool: R1, R2, R3, and 
 
 | ID | Original requirement (P3) | Revised requirement | Why it changed |
 |---|---|---|---|
-| R5 | The command list should be customizable so users can pin up to three commands, sorting pinned commands first and then alphabetically. | The command discovery service will expose available commands and metadata; command pinning is deferred until a persistence and UI design is specified. | The existing target feature has no pin state, storage boundary, or ordering UI, so the original requirement cannot be implemented or checked without expanding scope beyond command discovery. |
+| R5 | The command list should be customizable so users can pin up to three commands, sorting pinned commands first and then alphabetically. | The command discovery service will expose available commands and metadata; command pinning is deferred until a persistence and UI design is specified. | The current feature has no pin state, storage boundary, or ordering UI, so the original requirement cannot be implemented or checked without expanding the command-discovery scope. |
 
 ## Hand-written mutants
 
