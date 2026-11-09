@@ -36,23 +36,9 @@ These predictions were recorded before applying the patches or running Stryker.
 ## Stryker comparison
 
 Stryker configuration: `packages/opencode/stryker.sanikaj.config.json`. The fixed
-fast-check seed was `42`. Stryker generated 46 mutants: 43 killed, 0 timed out,
-and 3 survived, for a final mutation score of **93.48%**. The report is saved
-as `mutants/sanikaj/mutation.html`.
+fast-check seed was `42`.
 
-Stryker did not generate any of the five hand-written patches exactly. It did
-generate related boundary and conditional mutations, including the two
-surviving missing-argument comparisons. The hand-written mutants were more
-directly tied to the interview requirements, while Stryker explored lower-level
-regex and control-flow variations that were not obvious from the requirements.
-
-The three survivors are equivalent in the observable implementation under test:
-the `>=` to `>` and `>=` to `false` mutations both reach the same empty-string
-fallback for a missing argument, and the `numbered` conditional mutant did not
-change the observed result of the tested `hints` inputs in this runtime. No
-additional requirement-relevant behavior was found for these survivors.
-Excluding those three survivors, the adjusted score is **100% (43/43
-non-equivalent mutants killed)**.
+The mutation run is pending.
 
 ## Agent failure case
 

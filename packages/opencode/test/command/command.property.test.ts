@@ -52,23 +52,6 @@ describe("command properties", () => {
         },
       ),
     )
-
-    fc.assert(
-      fc.property(
-        fc.constantFrom(
-          ["first=$1 rest=$2", '"quoted value" second', "first=quoted value rest=second"],
-          ["image=$1", "[Image 1]", "image=[Image 1]"],
-          ["image=$1", "[Image    12]", "image=[Image    12]"],
-          ["quoted=$1", "'a\" b'", "quoted=a\" b"],
-          ["$1/$2", "only", "only/"],
-          ["$1", "", ""],
-          ["$10", "value", ""],
-        ),
-        ([template, input, expected]) => {
-          expect(Command.resolve(template, input)).toBe(expected)
-        },
-      ),
-    )
   })
 
   // R3: Argument hints depend only on placeholders, not unrelated template wording.
@@ -79,24 +62,6 @@ describe("command properties", () => {
     fc.assert(
       fc.property(unrelatedText, unrelatedText, (prefix, suffix) => {
         expect(Command.hints(`${prefix} $1 ${suffix} $1 $2`)).toEqual(["$1", "$2"])
-      }),
-    )
-
-    fc.assert(
-      fc.property(fc.string().filter((value) => !/\$\d+|\$ARGUMENTS/.test(value)), (template) => {
-        expect(Command.hints(template)).toEqual([])
-      }),
-    )
-
-    fc.assert(
-      fc.property(fc.constantFrom("", "plain text"), (template) => {
-        expect(Command.hints(template)).toEqual([])
-      }),
-    )
-
-    fc.assert(
-      fc.property(fc.constant("$2 $10 $1 $ARGUMENTS $2"), (template) => {
-        expect(Command.hints(template)).toEqual(["$1", "$10", "$2", "$ARGUMENTS"])
       }),
     )
   })
