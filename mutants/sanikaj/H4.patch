@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/command/index.ts b/packages/opencode/src/command/index.ts
+--- a/packages/opencode/src/command/index.ts
++++ b/packages/opencode/src/command/index.ts
+@@ -111,7 +111,6 @@ export const node = LayerNode.make({
+         commands[name] = {
+           name,
+           agent: command.agent,
+           model: command.model,
+           description: command.description,
+-          source: "command",
+           get template() {
+             return command.template
+           },
