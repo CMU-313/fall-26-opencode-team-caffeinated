@@ -1,0 +1,11 @@
+diff --git a/packages/opencode/src/command/index.ts b/packages/opencode/src/command/index.ts
+--- a/packages/opencode/src/command/index.ts
++++ b/packages/opencode/src/command/index.ts
+@@ -57,6 +57,6 @@ export function resolve(template: string, input: string) {
+     const position = Number(index)
+     const argIndex = position - 1
+     if (argIndex >= args.length) return ""
+-    if (position === last) return args.slice(argIndex).join(" ")
++    if (position === last) return args[argIndex] ?? ""
+     return args[argIndex] ?? ""
+   })
