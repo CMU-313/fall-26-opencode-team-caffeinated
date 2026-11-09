@@ -27,11 +27,11 @@ These predictions were recorded before applying the patches or running Stryker.
 
 | ID | Requirement targeted | Change | Predicted killer | Actual result |
 |---|---|---|---|---|
-| H1 | R2 | Change the positional argument index from `position - 1` to `position`. | R2 positional-substitution property, because `$1` would receive the second generated token. | Killed by R2 after 1,000 seeded cases. |
-| H2 | R2 | Make the final placeholder consume only one token instead of all remaining tokens. | Initially predicted to survive; after strengthening R2 with 2–5 generated tokens, it is killed. | Killed by strengthened R2. |
-| H3 | R3 | Remove deduplication from extracted numbered hints. | Initially predicted to survive; after generating duplicate `$1` placeholders, it is killed. | Killed by strengthened R3. |
-| H4 | R4 | Omit `source: "command"` from configured command metadata. | Initially predicted to survive because the property only constructed `Command.Info`; after testing `Command.configured`, it is killed. | Killed by strengthened R4. |
-| H5 | R2 | Stop appending raw input when a template has no placeholders. | Initially predicted to survive; after adding a no-placeholder generated case, it is killed. | Killed by strengthened R2. |
+| H1 | R2 | Change the positional argument index from `position - 1` to `position`. | R2 positional-substitution property, because `$1` would receive the second generated token. | Killed by R2; shrunk counterexample: `["(", "#"]`. |
+| H2 | R2 | Make the final placeholder consume only one token instead of all remaining tokens. | Initially predicted to survive; after strengthening R2 with 2–5 generated tokens, it is killed. | Killed by R2; shrunk counterexample: `["#", "#", "#"]`. |
+| H3 | R3 | Remove deduplication from extracted numbered hints. | Initially predicted to survive; after generating duplicate `$1` placeholders, it is killed. | Killed by R3; shrunk counterexample: `["", ""]`. |
+| H4 | R4 | Omit `source: "command"` from configured command metadata. | Initially predicted to survive because the property only constructed `Command.Info`; after testing `Command.configured`, it is killed. | Killed by R4; shrunk counterexample: `[" ", ""]`. |
+| H5 | R2 | Stop appending raw input when a template has no placeholders. | Initially predicted to survive; after adding a no-placeholder generated case, it is killed. | Killed by R2; shrunk counterexample: `["!"]`. |
 
 ## Stryker comparison
 
