@@ -8,7 +8,6 @@ import {
   oneof,
   record,
   property,
-  uniqueArray,
   configureGlobal,
 } from "fast-check"
 import { Effect, Layer } from "effect"
@@ -88,21 +87,9 @@ const usageArbitrary = record({
   addedCostCents: integer({ min: 1, max: 100_000 }),
 })
 
-// R4: Distinct ascending insertion counts force the displayed top-model order
-// to differ from insertion order, while limits always select valid prefixes.
-const modelOrderingArbitrary = uniqueArray(integer({ min: 1, max: 100 }), { minLength: 2, maxLength: 10 })
-  .map((messages) =>
-    [...messages]
-      .sort((a, b) => a - b)
-      .map((count, index) => ({
-        messages: count,
-        inputTokens: index + 1,
-        outputTokens: index + 2,
-        cacheReadTokens: index + 3,
-        cacheWriteTokens: index + 4,
-        costCents: index + 5,
-      })),
-  )
+// R4: Generate each model's usage independently so message and token rankings
+// can differ.
+const modelOrderingArbitrary = array(modelUsageArbitrary, { minLength: 2, maxLength: 10 })
   .chain((models) =>
     integer({ min: 1, max: models.length - 1 }).chain((firstLimit) =>
       integer({ min: firstLimit + 1, max: models.length }).map((secondLimit) => ({
@@ -269,6 +256,7 @@ describe("aggregate statistics", () => {
                 // Give one session baseline usage and the soon-to-be-deleted session additional usage.
                 const base = yield* session.create({})
                 const added = yield* session.create({})
+                const projectInitial = yield* aggregateSessionStats(undefined, base.projectID)
                 yield* recordUsage(session, base.id, baseTokens, baseCostCents / 100)
                 yield* recordUsage(session, added.id, addedTokens, addedCostCents / 100)
                 const ledgerRows = yield* database.db
@@ -299,6 +287,17 @@ describe("aggregate statistics", () => {
                 expect(beforeDelete.totalTokens.cache.read - initial.totalTokens.cache.read).toBe(expectedTokens.cache.read)
                 expect(beforeDelete.totalTokens.cache.write - initial.totalTokens.cache.write).toBe(expectedTokens.cache.write)
                 expect(beforeDelete.totalCost - initial.totalCost).toBeCloseTo(expectedCost, 8)
+                const projectBeforeDelete = yield* aggregateSessionStats(undefined, base.projectID)
+                expect(projectBeforeDelete.totalTokens.input - projectInitial.totalTokens.input).toBe(expectedTokens.input)
+                expect(projectBeforeDelete.totalTokens.output - projectInitial.totalTokens.output).toBe(expectedTokens.output)
+                expect(projectBeforeDelete.totalTokens.reasoning - projectInitial.totalTokens.reasoning).toBe(expectedTokens.reasoning)
+                expect(projectBeforeDelete.totalTokens.cache.read - projectInitial.totalTokens.cache.read).toBe(
+                  expectedTokens.cache.read,
+                )
+                expect(projectBeforeDelete.totalTokens.cache.write - projectInitial.totalTokens.cache.write).toBe(
+                  expectedTokens.cache.write,
+                )
+                expect(projectBeforeDelete.totalCost - projectInitial.totalCost).toBeCloseTo(expectedCost, 8)
 
                 // Removing the added session must leave the combined totals intact.
                 yield* session.remove(added.id)
@@ -310,6 +309,14 @@ describe("aggregate statistics", () => {
                 expect(afterDelete.totalTokens.cache.write).toBe(beforeDelete.totalTokens.cache.write)
                 expect(afterDelete.totalCost).toBeCloseTo(beforeDelete.totalCost, 8)
 
+                const projectAfterDelete = yield* aggregateSessionStats(undefined, base.projectID)
+                expect(projectAfterDelete.totalTokens.input).toBe(projectBeforeDelete.totalTokens.input)
+                expect(projectAfterDelete.totalTokens.output).toBe(projectBeforeDelete.totalTokens.output)
+                expect(projectAfterDelete.totalTokens.reasoning).toBe(projectBeforeDelete.totalTokens.reasoning)
+                expect(projectAfterDelete.totalTokens.cache.read).toBe(projectBeforeDelete.totalTokens.cache.read)
+                expect(projectAfterDelete.totalTokens.cache.write).toBe(projectBeforeDelete.totalTokens.cache.write)
+                expect(projectAfterDelete.totalCost).toBeCloseTo(projectBeforeDelete.totalCost, 8)
+
                 yield* session.remove(base.id)
               }),
             ),
@@ -320,94 +327,143 @@ describe("aggregate statistics", () => {
     }),
   )
 
-  // R6: Both append-only ledgers must honor the requested time window.
-  // Inserting one recent and one out-of-window row exercises non-empty filters
-  // and proves old activity is excluded independently for messages and usage.
+  // R6: Both append-only ledgers must honor the requested time window, including
+  // rows between the rolling and calendar-day cutoffs.
   it.instance("filters message and usage ledger rows by the requested time window", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
-      const database = yield* Database.Service
-      const info = yield* session.create({})
-      const before = yield* aggregateSessionStats(1)
-      const recentTime = Date.now()
-      const oldTime = recentTime - 3 * 24 * 60 * 60 * 1000
-      const oldMessageID = MessageID.ascending()
-      const recentMessageID = MessageID.ascending()
-      const oldPartID = PartID.ascending()
-      const recentPartID = PartID.ascending()
+      const context = yield* Effect.context<Database.Service | Session.Service>()
+      yield* Effect.promise(() =>
+        assert(
+          asyncProperty(integer({ min: 0, max: 10 }), async (intermediateCount) =>
+            Effect.runPromiseWith<Database.Service | Session.Service>(context)(
+              Effect.gen(function* () {
+                const database = yield* Database.Service
+                const info = yield* session.create({})
+                const fixedNow = Date.UTC(2026, 10, 8, 18)
+                const now = spyOn(Date, "now").mockReturnValue(fixedNow)
 
-      yield* database.db
-        .insert(SessionMessageLedgerTable)
-        .values([
-          {
-            message_id: oldMessageID,
-            session_id: info.id,
-            project_id: info.projectID,
-            time_created: oldTime,
-            role: "assistant",
-            provider_id: "test",
-            model_id: "test",
-          },
-          {
-            message_id: recentMessageID,
-            session_id: info.id,
-            project_id: info.projectID,
-            time_created: recentTime,
-            role: "assistant",
-            provider_id: "test",
-            model_id: "test",
-          },
-        ])
-        .run()
-        .pipe(Effect.orDie)
+                try {
+                  const before = yield* aggregateSessionStats(1)
+                  const rollingCutoff = fixedNow - 24 * 60 * 60 * 1000
+                  const calendarCutoff = new Date(rollingCutoff).setHours(0, 0, 0, 0)
+                  const intermediateRows = Array.from({ length: intermediateCount }, (_, index) => ({
+                    messageID: MessageID.ascending(),
+                    partID: PartID.ascending(),
+                    time:
+                      calendarCutoff +
+                      Math.floor(
+                        ((rollingCutoff - calendarCutoff) * (index + 1)) / (intermediateCount + 1),
+                      ),
+                  }))
+                  const oldMessageID = MessageID.ascending()
+                  const recentMessageID = MessageID.ascending()
+                  const oldTime = fixedNow - 3 * 24 * 60 * 60 * 1000
 
-      yield* database.db
-        .insert(SessionUsageLedgerTable)
-        .values([
-          {
-            part_id: oldPartID,
-            session_id: info.id,
-            project_id: info.projectID,
-            message_id: oldMessageID,
-            time_created: oldTime,
-            provider_id: "test",
-            model_id: "test",
-            cost: 0.23,
-            tokens_input: 23,
-            tokens_output: 29,
-            tokens_reasoning: 31,
-            tokens_cache_read: 37,
-            tokens_cache_write: 41,
-          },
-          {
-            part_id: recentPartID,
-            session_id: info.id,
-            project_id: info.projectID,
-            message_id: recentMessageID,
-            time_created: recentTime,
-            provider_id: "test",
-            model_id: "test",
-            cost: 0.07,
-            tokens_input: 7,
-            tokens_output: 11,
-            tokens_reasoning: 13,
-            tokens_cache_read: 17,
-            tokens_cache_write: 19,
-          },
-        ])
-        .run()
-        .pipe(Effect.orDie)
+                  yield* database.db
+                    .insert(SessionMessageLedgerTable)
+                    .values([
+                      {
+                        message_id: oldMessageID,
+                        session_id: info.id,
+                        project_id: info.projectID,
+                        time_created: oldTime,
+                        role: "assistant",
+                        provider_id: "test",
+                        model_id: "test",
+                      },
+                      {
+                        message_id: recentMessageID,
+                        session_id: info.id,
+                        project_id: info.projectID,
+                        time_created: fixedNow,
+                        role: "assistant",
+                        provider_id: "test",
+                        model_id: "test",
+                      },
+                      ...intermediateRows.map((row) => ({
+                        message_id: row.messageID,
+                        session_id: info.id,
+                        project_id: info.projectID,
+                        time_created: row.time,
+                        role: "assistant" as const,
+                        provider_id: "test",
+                        model_id: "test",
+                      })),
+                    ])
+                    .run()
+                    .pipe(Effect.orDie)
 
-      const after = yield* aggregateSessionStats(1)
-      expect(after.totalMessages - before.totalMessages).toBe(1)
-      expect(after.totalCost - before.totalCost).toBeCloseTo(0.07, 8)
-      expect(after.totalTokens.input - before.totalTokens.input).toBe(7)
-      expect(after.totalTokens.output - before.totalTokens.output).toBe(11)
-      expect(after.totalTokens.reasoning - before.totalTokens.reasoning).toBe(13)
-      expect(after.totalTokens.cache.read - before.totalTokens.cache.read).toBe(17)
-      expect(after.totalTokens.cache.write - before.totalTokens.cache.write).toBe(19)
+                  yield* database.db
+                    .insert(SessionUsageLedgerTable)
+                    .values([
+                      {
+                        part_id: PartID.ascending(),
+                        session_id: info.id,
+                        project_id: info.projectID,
+                        message_id: oldMessageID,
+                        time_created: oldTime,
+                        provider_id: "test",
+                        model_id: "test",
+                        cost: 0.23,
+                        tokens_input: 23,
+                        tokens_output: 29,
+                        tokens_reasoning: 31,
+                        tokens_cache_read: 37,
+                        tokens_cache_write: 41,
+                      },
+                      {
+                        part_id: PartID.ascending(),
+                        session_id: info.id,
+                        project_id: info.projectID,
+                        message_id: recentMessageID,
+                        time_created: fixedNow,
+                        provider_id: "test",
+                        model_id: "test",
+                        cost: 0.07,
+                        tokens_input: 7,
+                        tokens_output: 11,
+                        tokens_reasoning: 13,
+                        tokens_cache_read: 17,
+                        tokens_cache_write: 19,
+                      },
+                      ...intermediateRows.map((row) => ({
+                        part_id: row.partID,
+                        session_id: info.id,
+                        project_id: info.projectID,
+                        message_id: row.messageID,
+                        time_created: row.time,
+                        provider_id: "test",
+                        model_id: "test",
+                        cost: 0.01,
+                        tokens_input: 1,
+                        tokens_output: 1,
+                        tokens_reasoning: 1,
+                        tokens_cache_read: 1,
+                        tokens_cache_write: 1,
+                      })),
+                    ])
+                    .run()
+                    .pipe(Effect.orDie)
 
-      yield* session.remove(info.id)
+                  const after = yield* aggregateSessionStats(1)
+                  expect(after.totalMessages - before.totalMessages).toBe(1)
+                  expect(after.totalCost - before.totalCost).toBeCloseTo(0.07, 8)
+                  expect(after.totalTokens.input - before.totalTokens.input).toBe(7)
+                  expect(after.totalTokens.output - before.totalTokens.output).toBe(11)
+                  expect(after.totalTokens.reasoning - before.totalTokens.reasoning).toBe(13)
+                  expect(after.totalTokens.cache.read - before.totalTokens.cache.read).toBe(17)
+                  expect(after.totalTokens.cache.write - before.totalTokens.cache.write).toBe(19)
+                } finally {
+                  now.mockRestore()
+                  yield* session.remove(info.id)
+                }
+              }),
+            ),
+          ),
+          { numRuns: 50 },
+        ),
+      )
     }),
   )
 
