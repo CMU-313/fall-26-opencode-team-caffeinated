@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index b12fef4..0afd02c 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -327,7 +327,7 @@ function Intro(props: { api: TuiPluginApi }) {
+           }}
+         </For>
+         <box flexDirection="row" gap={4} paddingTop={1} paddingLeft={2}>
+-          <text fg={theme().primary} attributes={TextAttributes.BOLD} onMouseUp={advance}>
++          <text fg={theme().primary} attributes={TextAttributes.BOLD} onMouseUp={() => setExpanded((step) => step + 1)}>
+             Next →
+           </text>
+           <text fg={theme().textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>

@@ -1,0 +1,14 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index b12fef4..cc27a00 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -331,7 +331,8 @@ function Intro(props: { api: TuiPluginApi }) {
+             Next →
+           </text>
+           <text fg={theme().textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
+-            Skip tour
++            {/* Nothing left to skip on the last step, so it just closes the tour */}
++            {expanded() === STEPS.length - 1 ? "Finish" : "Skip tour"}
+           </text>
+         </box>
+       </box>
