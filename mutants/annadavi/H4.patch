@@ -1,0 +1,8 @@
+diff --git a/packages/opencode/src/cli/cmd/stats.ts b/packages/opencode/src/cli/cmd/stats.ts
+index 9095ded..dd5f90f 100644
+--- a/packages/opencode/src/cli/cmd/stats.ts
++++ b/packages/opencode/src/cli/cmd/stats.ts
+@@ -283,2 +283,2 @@
+-  stats.totalMessages = messageRows.length
++  stats.totalMessages = messageRows.filter((message) => filteredSessions.some((session) => session.id === message.session_id)).length
+   const rangeDays = Math.max(1, Math.ceil((latestTime - earliestTime) / MS_IN_DAY))

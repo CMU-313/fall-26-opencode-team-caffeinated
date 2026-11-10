@@ -15,6 +15,7 @@ import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migrat
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import appendUsageLedgerMigration from "@opencode-ai/core/database/migration/20261103182916_append_usage_ledger"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -76,6 +77,12 @@ describe("DatabaseMigration", () => {
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_context_epoch'`),
         ).toEqual({ name: "session_context_epoch" })
         expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_message_ledger'`),
+        ).toEqual({ name: "session_message_ledger" })
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_usage_ledger'`),
+        ).toEqual({ name: "session_usage_ledger" })
+        expect(
           yield* db.get(
             sql`SELECT name FROM pragma_table_info('session_context_epoch') WHERE name IN ('agent', 'replacement_seq', 'revision')`,
           ),
@@ -83,7 +90,7 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: migrations.length })
         expect(
           yield* db.all(
-            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_input_session_admitted_seq_idx', 'session_input_session_promoted_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx') ORDER BY name`,
+            sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx', 'session_input_session_pending_seq_idx', 'session_input_session_pending_delivery_seq_idx', 'session_input_session_admitted_seq_idx', 'session_input_session_promoted_seq_idx', 'session_message_session_idx', 'session_message_session_type_idx', 'session_message_session_seq_idx', 'session_message_session_type_seq_idx', 'session_message_session_time_created_id_idx', 'session_message_ledger_project_time_idx', 'session_message_ledger_model_idx', 'session_usage_ledger_project_time_idx', 'session_usage_ledger_model_idx') ORDER BY name`,
           ),
         ).toEqual([
           { name: "event_aggregate_seq_idx" },
@@ -91,10 +98,71 @@ describe("DatabaseMigration", () => {
           { name: "session_input_session_admitted_seq_idx" },
           { name: "session_input_session_pending_delivery_seq_idx" },
           { name: "session_input_session_promoted_seq_idx" },
+          { name: "session_message_ledger_model_idx" },
+          { name: "session_message_ledger_project_time_idx" },
           { name: "session_message_session_seq_idx" },
           { name: "session_message_session_time_created_id_idx" },
           { name: "session_message_session_type_seq_idx" },
+          { name: "session_usage_ledger_model_idx" },
+          { name: "session_usage_ledger_project_time_idx" },
         ])
+      }),
+    )
+  })
+
+  test("backfills the append-only usage ledgers from surviving projections", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, project_id text NOT NULL)`)
+        yield* db.run(
+          sql`CREATE TABLE message (id text PRIMARY KEY, session_id text NOT NULL, time_created integer NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE part (id text PRIMARY KEY, session_id text NOT NULL, message_id text NOT NULL, time_created integer NOT NULL, data text NOT NULL)`,
+        )
+        yield* db.run(sql`INSERT INTO session (id, project_id) VALUES ('ses_backfill', 'prj_backfill')`)
+        yield* db.run(
+          sql`INSERT INTO message (id, session_id, time_created, data) VALUES ('msg_backfill', 'ses_backfill', 10, '{"role":"assistant","providerID":"provider-backfill","modelID":"model-backfill"}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, session_id, message_id, time_created, data) VALUES ('prt_backfill', 'ses_backfill', 'msg_backfill', 20, '{"type":"step-finish","cost":0.25,"tokens":{"input":11,"output":12,"reasoning":13,"cache":{"read":14,"write":15}}}')`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [appendUsageLedgerMigration])
+
+        expect(
+          yield* db.get(
+            sql`SELECT message_id, session_id, project_id, time_created, role, provider_id, model_id FROM session_message_ledger`,
+          ),
+        ).toEqual({
+          message_id: "msg_backfill",
+          session_id: "ses_backfill",
+          project_id: "prj_backfill",
+          time_created: 10,
+          role: "assistant",
+          provider_id: "provider-backfill",
+          model_id: "model-backfill",
+        })
+        expect(
+          yield* db.get(
+            sql`SELECT part_id, session_id, project_id, message_id, time_created, provider_id, model_id, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write FROM session_usage_ledger`,
+          ),
+        ).toEqual({
+          part_id: "prt_backfill",
+          session_id: "ses_backfill",
+          project_id: "prj_backfill",
+          message_id: "msg_backfill",
+          time_created: 20,
+          provider_id: "provider-backfill",
+          model_id: "model-backfill",
+          cost: 0.25,
+          tokens_input: 11,
+          tokens_output: 12,
+          tokens_reasoning: 13,
+          tokens_cache_read: 14,
+          tokens_cache_write: 15,
+        })
       }),
     )
   })

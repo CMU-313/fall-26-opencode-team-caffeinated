@@ -9,3 +9,5 @@ packages/sdk/js/tsconfig.tsbuildinfo
 test-results/.last-run.json
 .devcontainer
 openrouter.txt
+reports/
+.stryker-tmp/

@@ -1,0 +1,9 @@
+diff --git a/packages/opencode/src/cli/cmd/stats.ts b/packages/opencode/src/cli/cmd/stats.ts
+index 9095ded..a3fb83a 100644
+--- a/packages/opencode/src/cli/cmd/stats.ts
++++ b/packages/opencode/src/cli/cmd/stats.ts
+@@ -328,3 +328,3 @@
+   console.log("├────────────────────────────────────────────────────────┤")
+-  console.log(renderRow("Sessions", stats.totalSessions.toLocaleString()))
++  console.log(renderRow("Sessions", (modelLimit === undefined ? stats.totalSessions : Object.keys(stats.modelUsage).length).toLocaleString()))
+   console.log(renderRow("Messages", stats.totalMessages.toLocaleString()))
