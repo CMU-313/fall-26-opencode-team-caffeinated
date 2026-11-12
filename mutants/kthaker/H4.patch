@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index f95d11b..bbaffbb 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -49,7 +49,7 @@ export const STEPS = [
+     tryIt: undefined,
+     verify: {
+       when: "your project has an AGENTS.md",
+-      because: "This project already has an AGENTS.md file.",
++      because: "This project already has project instructions.",
+       done: (progress: Progress) => progress.instructions,
+     },
+     question: "What does /init do?",

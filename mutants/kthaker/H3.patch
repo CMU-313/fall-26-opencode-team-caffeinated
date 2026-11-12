@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index f95d11b..cbde2a7 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -81,7 +81,7 @@ export const STEPS = [
+     verify: {
+       when: "you have more than one session",
+       because: "You have more than one session in this project.",
+-      done: (progress: Progress) => progress.sessions > 1,
++      done: (progress: Progress) => progress.sessions >= 1,
+     },
+     question: "When should I start a new session?",
+     answer:

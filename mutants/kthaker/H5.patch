@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index f95d11b..f66b599 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -231,7 +231,7 @@ function Intro(props: { api: TuiPluginApi }) {
+               return (
+                 <text fg={color(theme().textMuted)} onMouseOver={hover} onMouseUp={click}>
+                   {prefix()}
+-                  {props.api.kv.get("intro_hide_on_launch", false) ? "☐" : "☑"} Show this when OpenCode starts (enter to toggle)
++                  {props.api.kv.get("intro_hide_on_launch", true) ? "☐" : "☑"} Show this when OpenCode starts (enter to toggle)
+                 </text>
+               )
+             if (row.kind === "reset")
