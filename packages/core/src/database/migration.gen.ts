@@ -41,5 +41,6 @@ export const migrations = (
     import("./migration/20260622170816_reset_v2_session_state"),
     import("./migration/20260622202450_simplify_session_input"),
     import("./migration/20260914021845_add_legacy_experience_mode"),
+    import("./migration/20261103182916_append_usage_ledger"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

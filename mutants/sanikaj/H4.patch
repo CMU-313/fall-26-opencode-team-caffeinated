@@ -1,0 +1,12 @@
+diff --git a/packages/opencode/src/command/index.ts b/packages/opencode/src/command/index.ts
+--- a/packages/opencode/src/command/index.ts
++++ b/packages/opencode/src/command/index.ts
+@@ -80,8 +80,7 @@ export function configured(name: string, command: ConfiguredCommand): Info {
+     agent: command.agent,
+     model: command.model,
+     description: command.description,
+-    source: "command",
+     template: command.template,
+     subtask: command.subtask,
+     hints: hints(command.template),
+   }

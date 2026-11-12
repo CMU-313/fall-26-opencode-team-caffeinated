@@ -1,0 +1,10 @@
+diff --git a/packages/opencode/src/command/index.ts b/packages/opencode/src/command/index.ts
+--- a/packages/opencode/src/command/index.ts
++++ b/packages/opencode/src/command/index.ts
+@@ -63,5 +63,5 @@ export function resolve(template: string, input: string) {
+ 
+   if (template.includes("$ARGUMENTS")) return withArgs.replaceAll("$ARGUMENTS", input)
+   if (placeholders.length > 0 || !input.trim()) return withArgs
+-  return `${withArgs}\n\n${input}`
++  return withArgs
+ }

@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/command/index.ts b/packages/opencode/src/command/index.ts
+--- a/packages/opencode/src/command/index.ts
++++ b/packages/opencode/src/command/index.ts
+@@ -55,8 +55,8 @@ export function resolve(template: string, input: string) {
+   const last = placeholders.reduce((highest, item) => Math.max(highest, Number(item.slice(1))), 0)
+   const withArgs = template.replaceAll(placeholderRegex, (_, index) => {
+     const position = Number(index)
+-    const argIndex = position - 1
++    const argIndex = position
+     if (argIndex >= args.length) return ""
+     if (position === last) return args.slice(argIndex).join(" ")
+     return args[argIndex] ?? ""
+   })

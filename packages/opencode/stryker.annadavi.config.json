@@ -1,0 +1,14 @@
+{
+  "testRunner": "command",
+  "commandRunner": { "command": "bun test test/aggregate-statistics/aggregate-statistics.property.test.ts" },
+  "mutate": [
+    "src/cli/cmd/stats.ts:142-147",
+    "src/cli/cmd/stats.ts:152-157",
+    "src/cli/cmd/stats.ts:211-216",
+    "src/cli/cmd/stats.ts:283-283",
+    "src/cli/cmd/stats.ts:329-330",
+    "src/cli/cmd/stats.ts:355-357"
+  ],
+  "coverageAnalysis": "off",
+  "reporters": ["html", "clear-text", "progress"]
+}

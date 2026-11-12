@@ -13,7 +13,15 @@ import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
 import { SessionContextEpoch } from "./context-epoch"
-import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
+import {
+  MessageTable,
+  PartTable,
+  SessionInputTable,
+  SessionMessageLedgerTable,
+  SessionMessageTable,
+  SessionTable,
+  SessionUsageLedgerTable,
+} from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -265,11 +273,32 @@ const layer = Layer.effectDiscard(
         const time_created = event.data.info.time.created
         const id = event.data.info.id
         const sessionID = event.data.info.sessionID
+        const session = yield* db
+          .select({ project_id: SessionTable.project_id })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!session) return yield* Effect.die(`Session not found while recording message usage: ${sessionID}`)
         const data = messageData(event.data.info)
         yield* db
           .insert(MessageTable)
           .values({ id, session_id: sessionID, time_created, data })
           .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionMessageLedgerTable)
+          .values({
+            message_id: id,
+            session_id: sessionID,
+            project_id: session.project_id,
+            time_created,
+            role: event.data.info.role,
+            provider_id: event.data.info.role === "assistant" ? event.data.info.providerID : null,
+            model_id: event.data.info.role === "assistant" ? event.data.info.modelID : null,
+          })
+          .onConflictDoNothing()
           .run()
           .pipe(Effect.orDie)
       }),
@@ -316,6 +345,29 @@ const layer = Layer.effectDiscard(
         const messageID = event.data.part.messageID
         const sessionID = event.data.part.sessionID
         const data = partData(event.data.part)
+        const next = usage(event.data.part)
+        const session = next
+          ? yield* db
+              .select({ project_id: SessionTable.project_id })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, sessionID))
+              .get()
+              .pipe(Effect.orDie)
+          : undefined
+        const message = next
+          ? yield* db
+              .select({
+                provider_id: sql<string | null>`json_extract(${MessageTable.data}, '$.providerID')`,
+                model_id: sql<string | null>`json_extract(${MessageTable.data}, '$.modelID')`,
+              })
+              .from(MessageTable)
+              .where(and(eq(MessageTable.id, messageID), eq(MessageTable.session_id, sessionID)))
+              .get()
+              .pipe(Effect.orDie)
+          : undefined
+        if (next && (!session || !message)) {
+          return yield* Effect.die(`Session message not found while recording usage: ${sessionID}/${messageID}`)
+        }
         const row = yield* db.select().from(PartTable).where(eq(PartTable.id, id)).get().pipe(Effect.orDie)
         yield* db
           .insert(PartTable)
@@ -324,9 +376,30 @@ const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         const previous = row && usage(row.data)
-        const next = usage(event.data.part)
         if (previous) yield* applyUsage(db, row.session_id, previous, -1)
         if (next) yield* applyUsage(db, sessionID, next)
+        if (next && session && message) {
+          yield* db
+            .insert(SessionUsageLedgerTable)
+            .values({
+              part_id: id,
+              session_id: sessionID,
+              project_id: session.project_id,
+              message_id: messageID,
+              time_created: event.data.time,
+              provider_id: message.provider_id,
+              model_id: message.model_id,
+              cost: next.cost,
+              tokens_input: next.tokens.input,
+              tokens_output: next.tokens.output,
+              tokens_reasoning: next.tokens.reasoning,
+              tokens_cache_read: next.tokens.cache.read,
+              tokens_cache_write: next.tokens.cache.write,
+            })
+            .onConflictDoNothing()
+            .run()
+            .pipe(Effect.orDie)
+        }
       }),
     )
     yield* events.project(SessionEvent.AgentSwitched, (event) =>

@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/cli/cmd/stats.ts b/packages/opencode/src/cli/cmd/stats.ts
+index 9095ded..46fc349 100644
+--- a/packages/opencode/src/cli/cmd/stats.ts
++++ b/packages/opencode/src/cli/cmd/stats.ts
+@@ -148,7 +148,7 @@ export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function*
+ 
+   const usageConditions = []
+   if (cutoffTime > 0) usageConditions.push(gte(SessionUsageLedgerTable.time_created, cutoffTime))
+-  if (projectID !== undefined) usageConditions.push(eq(SessionUsageLedgerTable.project_id, projectID))
++  if (projectID == undefined) usageConditions.push(eq(SessionUsageLedgerTable.project_id, projectID))
+   const usageRows = yield* db
+     .select()
+     .from(SessionUsageLedgerTable)
