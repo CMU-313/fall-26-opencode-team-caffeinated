@@ -32,7 +32,8 @@ const actions = fc.array(
   { maxLength: 25 },
 )
 
-const runs = { numRuns: 20 }
+// Fixed seed so every Stryker run sees the same inputs and mutant results are repeatable
+const runs = { numRuns: 20, seed: 42 }
 const timeout = 120_000
 
 // R1: Intro progress is saved and restored when OpenCode restarts.

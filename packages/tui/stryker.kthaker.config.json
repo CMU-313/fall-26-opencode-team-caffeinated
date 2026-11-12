@@ -1,0 +1,19 @@
+{
+  "testRunner": "command",
+  "commandRunner": { "command": "bun test test/feature-plugins/intro.property.test.ts" },
+  "mutate": [
+    "src/feature-plugins/home/intro.tsx:24-28",
+    "src/feature-plugins/home/intro.tsx:37-41",
+    "src/feature-plugins/home/intro.tsx:50-54",
+    "src/feature-plugins/home/intro.tsx:81-85",
+    "src/feature-plugins/home/intro.tsx:93-103",
+    "src/feature-plugins/home/intro.tsx:117-136",
+    "src/feature-plugins/home/intro.tsx:158-185",
+    "src/feature-plugins/home/intro.tsx:211-213",
+    "src/feature-plugins/home/intro.tsx:230-236",
+    "src/feature-plugins/home/intro.tsx:270-272",
+    "src/feature-plugins/home/intro.tsx:280-288"
+  ],
+  "coverageAnalysis": "off",
+  "reporters": ["html", "clear-text", "progress"]
+}
