@@ -60,8 +60,8 @@ Stryker did generate the other two exactly. It made H3 (`sessions >= 1` on step 
 
 **What does each approach find that the other doesn't?**
 
-- **Hand-written mutants find realistic, multi-step bugs.** They can add new behavior (H1), use the operator a person would actually confuse (H2), and aim at one requirement on purpose. Predicting the result also tested whether I understood my own properties, for example that R2 would miss H5.
-- **Stryker finds what I didn't think to check.** It showed that R1 has no oracle for the correct count, that whole branches ("Start over", the question, "Try it", and commands rows) are never checked by any property, and that the generator misses cases (more than one model, a failed file listing). It also creates noise mutants that don't matter, and it can't add new code.
+- Hand-written mutants find realistic, multi-step bugs. They can add new behavior (H1), use the operator a person would actually confuse (H2), also intentionally focus on just one requirement. Predicting the result beforehand also tested whether I understood my own properties.
+- Stryker finds what I didn't think to check. It showed that R1 has no oracle for the correct count, that whole branches ("Start over", the question, "Try it", and commands rows) are never checked by any property, and that the generator misses cases (more than one model, a failed file listing). But, it does create 'noise' mutants that don't matter, and it can't add new code.
 
 ## Strengthening
 
@@ -82,11 +82,11 @@ The other 32 survivors change things no requirement covers: which step the intro
 
 ### Equivalent mutants
 
-| Line | Mutant | Why it is equivalent |
-|---|---|---|
-| 120 | `files?.data ?? []` changed to `files?.data ?? ["Stryker was here"]` | The fallback is only used when the file listing fails. The next step checks `file.name === "AGENTS.md"`, and a string has no `.name`, so the check is `false` exactly as it is for `[]`. Step 3 stays "not done" either way. |
-| 162 | `tryIt?.command ?? ""` changed to `tryIt?.command ?? "Stryker was here!"` | A "Try it" row is only created when the step has a `tryIt`, and every `tryIt` in `STEPS` has a `command`. So the value after `??` is never used, and changing it makes no difference. |
-| 162 | `tryIt?.command` changed to `tryIt.command` | For the same reason, `tryIt` is never undefined on a "Try it" row. `?.` and `.` behave the same when the value is always defined. |
+| Mutant | Why it is equivalent |
+|---|---|
+| `files?.data ?? []` changed to `files?.data ?? ["Stryker was here"]` | The fallback is only used when the file listing fails. The next step checks `file.name === "AGENTS.md"`, and a string has no `.name`, so the check is `false` exactly as it is for `[]`. Step 3 stays "not done" either way. |
+| `tryIt?.command ?? ""` changed to `tryIt?.command ?? "Stryker was here!"` | A "Try it" row is only created when the step has a `tryIt`, and every `tryIt` in `STEPS` has a `command`. So the value after `??` is never used, and changing it makes no difference. |
+| `tryIt?.command` changed to `tryIt.command` | For the same reason, `tryIt` is never undefined on a "Try it" row. `?.` and `.` behave the same when the value is always defined. |
 
 ### Final mutation score
 
@@ -127,7 +127,7 @@ Share link (from `/share`): https://opncd.ai/share/8YALrKZZ
 >
 > One design note: I chose not to vary sessions beyond 1 because any other value changes the done count (0 → 3/6, 2 → 5/6), which would violate the fixed "4/6" acceptance criterion.
 
-**opencode's generator and property (excerpt from the file it wrote):**
+**opencode's generator and property (pasted from the file it wrote):**
 
 ```ts
 const setup = fc.record({
@@ -179,7 +179,7 @@ H1 is the failure case: it targets R1, the requirement opencode was asked to tes
 
 ### Why the property was too weak
 
-It was a **generator that never reaches the bug**. To keep the intro at exactly 4/6, opencode fixed the setup so a provider is never connected. That means step 1 is always unfinished, so the step the intro opens on by itself is always step 1. Step 1 is a verified step, and marking a verified step as read changes nothing, so H1 has no visible effect. H1 only shows up when the intro opens on step 4 or 5 (the steps that are checked off by reading), which needs steps 1–3 to be done first, and opencode's generator never produces that setup.
+It was a generator that never reaches the bug. To keep the intro at exactly 4/6, opencode fixed the setup so a provider is never connected. That means step 1 is always unfinished, so the step the intro opens on by itself is always step 1. Step 1 is a verified step, and marking a verified step as read changes nothing, so H1 has no visible effect. H1 only shows up when the intro opens on step 4 or 5 (the steps that are checked off by reading), which needs steps 1–3 to be done first, and opencode's generator never produces that setup.
 
 ### Strengthened version
 
