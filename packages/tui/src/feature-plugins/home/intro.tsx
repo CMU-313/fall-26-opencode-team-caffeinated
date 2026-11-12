@@ -48,7 +48,7 @@ export const STEPS = [
     body: "Type `@` and a file name to attach that file to your message. Start a message with `!` to run a shell command yourself, like `!npm test`. Run `/init` once in a new project so OpenCode writes an AGENTS.md file that explains how your project works.",
     tryIt: undefined,
     verify: {
-      when: "your project has an AGENTS.md",
+      when: "your project has an AGENTS.md (run /init to create one)",
       because: "This project already has an AGENTS.md file.",
       done: (progress: Progress) => progress.instructions,
     },

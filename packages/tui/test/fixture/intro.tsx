@@ -30,6 +30,8 @@ export async function click(app: Awaited<ReturnType<typeof testRender>>, text: s
 export async function renderIntro(input: {
   provider?: string
   paid?: boolean
+  // Input cost of each model the provider offers (undefined = no cost info); overrides `paid`
+  costs?: (number | undefined)[]
   sessions?: number
   files?: string[]
   filesFail?: boolean
@@ -102,7 +104,14 @@ export async function renderIntro(input: {
       state: {
         ...base.state,
         provider: input.provider
-          ? [{ id: input.provider, models: { model: { cost: { input: input.paid ? 3 : 0 } } } }]
+          ? [
+              {
+                id: input.provider,
+                models: Object.fromEntries(
+                  (input.costs ?? [input.paid ? 3 : 0]).map((cost, i) => [`model${i}`, cost === undefined ? {} : { cost: { input: cost } }]),
+                ),
+              },
+            ]
           : [],
         session: { ...base.state.session, count: () => input.sessions ?? 0 },
       },

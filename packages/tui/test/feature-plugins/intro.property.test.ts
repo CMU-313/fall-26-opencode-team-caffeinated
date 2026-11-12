@@ -11,15 +11,18 @@ import { click, renderIntro } from "../fixture/intro"
 const setup = fc.oneof(
   fc.record({
     provider: fc.constantFrom(undefined, "opencode", "anthropic"),
-    paid: fc.boolean(),
+    // Model costs: only free, only paid, no cost info, or a mix of free and paid
+    costs: fc.constantFrom<(number | undefined)[]>([0], [3], [undefined], [0, 3]),
     sessions: fc.constantFrom(0, 1, 2, 7),
     files: fc.subarray(["AGENTS.md", "CLAUDE.md", "README.md", "src"]),
+    filesFail: fc.boolean(),
   }),
   fc.record({
     provider: fc.constant("anthropic"),
-    paid: fc.boolean(),
+    costs: fc.constant<(number | undefined)[]>([0]),
     sessions: fc.constantFrom(1, 2, 7),
     files: fc.constantFrom<string[]>(["AGENTS.md"], ["CLAUDE.md"], ["AGENTS.md", "src"]),
+    filesFail: fc.constant(false),
   }),
 )
 const read = fc.oneof(fc.constant<number[]>([]), fc.subarray([0, 1, 2, 3, 4, 5]))
@@ -33,7 +36,7 @@ const actions = fc.array(
 )
 
 // Fixed seed so every Stryker run sees the same inputs and mutant results are repeatable
-const runs = { numRuns: 20, seed: 42 }
+const runs = { numRuns: 40, seed: 42 }
 const timeout = 120_000
 
 // R1: Intro progress is saved and restored when OpenCode restarts.
@@ -43,15 +46,24 @@ test(
   "R1: restarting OpenCode restores the same progress",
   async () => {
     await fc.assert(
-      fc.asyncProperty(setup, read, actions, async (env, opened, keys) => {
+      fc.asyncProperty(setup, read, actions, fc.constantFrom(3, 4), async (env, opened, keys, step) => {
         const first = await openIntro({ ...env, stored: { intro_read: opened } })
-        const before = await use(first, keys).then(() => progressShown(first.app.captureCharFrame()))
+        await use(first, keys)
+        // Open step 4 or 5 (steps checked off by reading), closing it first if it is already open
+        if (rowOf(first.app.captureCharFrame(), step).includes("▾")) await click(first.app, STEPS[step].title)
+        await click(first.app, STEPS[step].title)
+        const before = progressShown(first.app.captureCharFrame())
         const saved = first.saved()
         first.app.renderer.destroy()
 
         const second = await openIntro({ ...env, stored: saved })
         try {
-          expect(progressShown(second.app.captureCharFrame())).toEqual(before)
+          const after = progressShown(second.app.captureCharFrame())
+          expect(after).toEqual(before)
+          // The opened step stays checked, verified steps match the user's setup, and N/6 counts the checkmarks
+          expect(after.checked[step]).toBe(true)
+          for (const [index, done] of oracle(env)) expect(after.checked[index]).toBe(done)
+          expect(after.done).toBe(String(after.checked.filter(Boolean).length))
         } finally {
           second.app.renderer.destroy()
         }
@@ -74,6 +86,7 @@ test(
         try {
           await use(intro, keys, { skipTryIt: true })
           expect(intro.calls.every((call) => call === "file.list")).toBe(true)
+          expect(intro.fileListInput()).toEqual({ path: "." })
           expect(Object.keys(intro.saved()).every((key) => key.startsWith("intro_"))).toBe(true)
         } finally {
           intro.app.renderer.destroy()
@@ -95,16 +108,15 @@ test(
       fc.asyncProperty(setup, async (env) => {
         const intro = await openIntro(env)
         try {
-          for (const [step, done] of oracle(env)) {
-            const verify = STEPS[step].verify!
-            const text = await expand(intro, step)
-            if (done) expect(text).toContain(`✓ Done. ${verify.because}`)
-            if (!done) expect(text).toContain(`○ Not done yet. This checks off when ${verify.when}.`)
+          for (const [step, done, why, todo] of oracle(env)) {
+            await expand(intro, step)
+            // The status line is checked against our own wording, not the text in STEPS
+            const status = statusLine(intro.app.captureCharFrame())
+            if (done) expect(status).toStartWith("✓ Done.")
+            if (done) expect(status).toContain(why)
+            if (!done) expect(status).toStartWith("○ Not done yet.")
+            if (!done) expect(status).toContain(todo)
           }
-          const hasInstructions = env.files.includes("AGENTS.md") || env.files.includes("CLAUDE.md")
-          const step3 = await expand(intro, 2)
-          if (hasInstructions) expect(step3).toContain("AGENTS.md")
-          if (!hasInstructions) expect(step3).toContain("/init")
         } finally {
           intro.app.renderer.destroy()
         }
@@ -122,8 +134,13 @@ test(
   "R4: toggling the launch setting twice puts everything back",
   async () => {
     await fc.assert(
-      fc.asyncProperty(setup, read, fc.boolean(), actions, async (env, opened, hidden, keys) => {
-        const intro = await openIntro({ ...env, stored: { intro_read: opened, intro_hide_on_launch: hidden } })
+      // hidden: undefined means the setting was never saved, so the default (show on launch) applies
+      fc.asyncProperty(setup, read, fc.constantFrom(true, false, undefined), actions, async (env, opened, hidden, keys) => {
+        const intro = await openIntro({
+          ...env,
+          firstLaunch: hidden === undefined,
+          stored: { intro_read: opened, ...(hidden === undefined ? {} : { intro_hide_on_launch: hidden }) },
+        })
         try {
           // Start from any state of the dialog, then select the launch row (just above "Start over", the last row)
           await use(intro, keys)
@@ -141,11 +158,11 @@ test(
           )
           expect(intro.saved()).toEqual({ ...startSaved, intro_hide_on_launch: !hidden })
 
-          // Toggle again: back exactly where it started
+          // Toggle again: back exactly where it started (a never-saved setting is now saved as "show")
           intro.app.mockInput.pressEnter()
           await intro.app.renderOnce()
           expect(intro.app.captureCharFrame()).toBe(startScreen)
-          expect(intro.saved()).toEqual(startSaved)
+          expect(intro.saved()).toEqual({ intro_hide_on_launch: false, ...startSaved })
         } finally {
           intro.app.renderer.destroy()
         }
@@ -156,13 +173,42 @@ test(
   timeout,
 )
 
-// The oracle for R3
-function oracle(env: { provider?: string; paid: boolean; sessions: number; files: string[] }) {
+// R5: The intro gives an optional, non-required way to see every OpenCode command.
+// Acceptance: selecting "See every command OpenCode has" opens the command palette and does not change the N/6 done.
+// Kind: invariant (from any dialog state, selecting the row opens the palette and progress is unchanged)
+test(
+  "R5: the commands row opens the palette without changing progress",
+  async () => {
+    await fc.assert(
+      fc.asyncProperty(setup, read, actions, async (env, opened, keys) => {
+        const intro = await openIntro({ ...env, stored: { intro_read: opened } })
+        try {
+          await use(intro, keys)
+          // The commands row is two rows above "Start over", the last row
+          intro.app.mockInput.pressKeys([...Array.from({ length: 20 }, () => "\x1b[B"), "\x1b[A", "\x1b[A"])
+          await intro.app.renderOnce()
+          const before = progressShown(intro.app.captureCharFrame())
+          intro.app.mockInput.pressEnter()
+          await intro.app.renderOnce()
+          expect(intro.dispatched.at(-1)).toBe("command.palette.show")
+          expect(progressShown(intro.app.captureCharFrame())).toEqual(before)
+        } finally {
+          intro.app.renderer.destroy()
+        }
+      }),
+      runs,
+    )
+  },
+  timeout,
+)
+
+// The oracle for R1 and R3: [step, done, words that say why it is done, words that say what checks it off]
+function oracle(env: { provider?: string; costs: (number | undefined)[]; sessions: number; files: string[]; filesFail: boolean }) {
   return [
-    [0, env.provider === "anthropic" || (env.provider === "opencode" && env.paid)],
-    [1, env.sessions >= 1],
-    [2, env.files.includes("AGENTS.md") || env.files.includes("CLAUDE.md")],
-    [5, env.sessions >= 2],
+    [0, env.provider === "anthropic" || (env.provider === "opencode" && env.costs.some((cost) => cost !== 0)), "connected a provider", "connect a provider"],
+    [1, env.sessions >= 1, "sent a message", "send your first message"],
+    [2, !env.filesFail && (env.files.includes("AGENTS.md") || env.files.includes("CLAUDE.md")), "AGENTS.md", "/init"],
+    [5, env.sessions >= 2, "more than one session", "more than one session"],
   ] as const
 }
 
@@ -200,6 +246,20 @@ function progressShown(frame: string) {
     done: frame.match(/(\d)\/6 done/)?.[1],
     checked: STEPS.map((step) => lines.find((line) => line.includes(step.title))?.includes("✓")),
   }
+}
+
+function rowOf(frame: string, step: number) {
+  return frame.split("\n").find((line) => line.includes(STEPS[step].title)) ?? ""
+}
+
+// The "✓ Done." or "○ Not done yet." line under the open step
+function statusLine(frame: string) {
+  return (
+    frame
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("✓ Done.") || line.startsWith("○ Not done yet.")) ?? ""
+  )
 }
 
 function selectedLine(frame: string) {
