@@ -10,9 +10,11 @@
 | R2 | C-4, O-3: “I wouldn’t expect it to change the files in the codebase” | Using the intro never creates, edits, or deletes files in the user’s project. | After selecting every row in the intro, except “Try It”, the project’s files and their contents are unchanged. | No | For any setup and any use of the dialog except “Try it”, every server call the intro makes is the read-only file listing of the project root, and it saves only its own `intro_` settings (invariant) | `packages/tui/test/feature-plugins/intro.property.test.ts`: “R2: using the intro only reads the project and only saves its own settings” | None |
 | R3 | C-8, O-7, S-10: “I would check … by manually following the instructions” | Each step that checks the user’s real setup (steps 1, 2, 3, and 6) shows a status line that says why it is done, or what action will check it off, so users can verify a checkmark themselves. | In a project without AGENTS.md, step 3 shows “not done yet” and names /init. After /init, it shows “Done” and mentions “AGENTS.md”. | Yes | For any setup, steps 1, 2, 3, and 6 show “✓ Done” with the reason or “○ Not done yet” with what checks it off, matching an independent rule and wording for each step (not the text in the source); step 3 names /init when not done and AGENTS.md when done (model / oracle) | `packages/tui/test/feature-plugins/intro.property.test.ts`: “R3: every verified step's status line matches the user's real setup” | H2, H3 |
 | R4 | S-5: “I didn’t even know it was clickable it just looks like a line” | The launch toggle shows its current state (☑ on, ☐ off), includes a hint for how to change it, and highlights when hovered or selected like the other selectable rows. | With auto-launch on, the row reads “☑ Show this when OpenCode starts (enter to toggle)” and highlights when hovered or selected, like other selectable rows. Selecting it changes the row to “☐,” and after a restart the intro does not open automatically. | Yes | From any dialog state and starting setting (on, off, or never saved), toggling the launch row flips ☑/☐ (keeping the “enter to toggle” hint and highlight) and saves only that setting; toggling again restores the screen and all saved settings (round-trip) | `packages/tui/test/feature-plugins/intro.property.test.ts`: “R4: toggling the launch setting twice puts everything back” | H4, H5 |
-| R5 | S-12: “There are lots of OpenCode commands, so what are these commands” | The intro gives an optional, non-required way to see every OpenCode command. | Selecting “See every command OpenCode has” opens the command palette. Not selecting it does not affect the completed number of steps. | No | From any dialog state, selecting the commands row opens the command palette and leaves the N/6 and checked steps unchanged (invariant) | `packages/tui/test/feature-plugins/intro.property.test.ts`: “R5: the commands row opens the palette without changing progress” | None (no hand-written mutant targets R5) |
+| R5 | S-12: “There are lots of OpenCode commands, so what are these commands” | The intro gives an optional, non-required way to see every OpenCode command. | Selecting “See every command OpenCode has” opens the command palette. Not selecting it does not affect the completed number of steps. | No | From any dialog state, selecting the commands row opens the command palette and leaves the N/6 and checked steps unchanged (invariant) | `packages/tui/test/feature-plugins/intro.property.test.ts`: “R5: the commands row opens the palette without changing progress” | None |
 
-Properties written or suggested by opencode or another AI tool: R1, R2, R3, R4, R5
+Properties written/suggested by another AI tool: R1, R2, R3, R4, R5
+
+Property written by opencode: an extra R1 property in `packages/tui/test/feature-plugins/intro.opencode.property.test.ts` (see Agent failure case)
 
 ## Requirement changes
 
@@ -36,7 +38,7 @@ Properties written or suggested by opencode or another AI tool: R1, R2, R3, R4, 
 
 ## Stryker comparison
 
-**Mutation score before strengthening: 57.24%** (83 killed, 62 survived, 0 timeouts, 145 mutants). Run with fast-check seed `42` and `numRuns: 20`, using `packages/tui/stryker.kthaker.config.json`, which runs only `intro.property.test.ts` and mutates only the lines of `intro.tsx` that R1–R4 cover. The final score after strengthening is in the Strengthening section, and `mutants/kthaker/mutation.html` is the report from that final run.
+**Mutation score before strengthening: 57.24%** (83 killed, 62 survived, 0 timeouts, 145 mutants). Run with fast-check seed `42` and `numRuns: 20`, using `packages/tui/stryker.kthaker.config.json`, which runs only `intro.property.test.ts` and mutates only the lines of `intro.tsx` that my requirements cover. The final score after strengthening is in the Strengthening section, and `mutants/kthaker/mutation.html` is the report from that final run.
 
 **Which hand-written mutants did Stryker never generate, and why?**
 
@@ -76,7 +78,7 @@ Stryker did generate the other two exactly. It made H3 (`sessions >= 1` on step 
 | `numRuns` raised from 20 to 40 (seed still `42`) so rare cases are reached | All | `.every` on models, any-file-counts-as-AGENTS.md |
 | Code fix: step 3's "not done" line now names /init ("your project has an AGENTS.md (run /init to create one)"), which the stronger R3 showed was missing | R3 | (real bug found by the property) |
 
-Not killed, because no requirement covers them: which step the intro opens on first, "Start over", the question row, "Try it", collapsing a step, colors, and step numbers.
+The other 32 survivors change things no requirement covers: which step the intro opens on first (lines 101, 131, 134), "Start over" (167–177), the question row (163, 166), "Try it" (162), collapsing a step (180), selecting a clicked row without hovering first (160), a duplicate step number in the saved read list (183), colors (211, 270), and step numbers (271).
 
 ### Equivalent mutants
 
@@ -97,72 +99,132 @@ Run with fast-check seed `42` and `numRuns: 40`.
 
 ## Agent failure case
 
-**Property:** R3, "every verified step's status line matches the user's real setup", written with opencode.
+**Property:** a new R1 property written by opencode, in `packages/tui/test/feature-plugins/intro.opencode.property.test.ts` ("R1: restarting OpenCode at 4/6 restores the same progress"). None of my existing properties came from opencode, so I asked it to write one for R1.
 
 ### opencode transcript
 
-> TODO: paste the opencode prompt and response where R3 was written (a screenshot is fine).
+Share link (from `/share`): https://opncd.ai/share/8YALrKZZ
+
+**My prompt:**
+
+> I'm working on the "Intro to OpenCode" feature in packages/tui/src/feature-plugins/home/intro.tsx. There is a test fixture in packages/tui/test/fixture/intro.tsx (renderIntro) that renders the intro with a fake settings store, a fake setup (provider, sessions, files), and a `stored` option to simulate settings saved by an earlier run.
 >
-> Share link (from `/share`): TODO
+> Write a fast-check property-based test for this requirement:
+>
+> R1: Intro progress is saved and restored when OpenCode restarts.
+> Acceptance criterion: with the intro at 4/6, restarting OpenCode with no other changes still shows 4/6 with the same steps checked.
+>
+> Put it in a new file: packages/tui/test/feature-plugins/intro.opencode.property.test.ts. Use bun:test and fast-check (already installed), use { numRuns: 40, seed: 42 }, and make sure it passes when run from packages/tui with: bun test test/feature-plugins/intro.opencode.property.test.ts. Don't modify any existing files.
+
+**opencode's plan (excerpt):**
+
+> 1. Generators that hold the intro at exactly 4/6:
+>    - provider: undefined or "opencode" (no connected provider → step 0 undone)
+>    - costs: [0] (free models → step 0 stays undone even for opencode)
+>    - sessions: 1 (step 1 done; step 5 needs >1, so undone)
+>    - files: one of ["AGENTS.md"], ["AGENTS.md", "README.md"], ["AGENTS.md", "src"] (step 2 done via AGENTS.md)
+> 2. Per run: … Click step 3 ("Plan first, then build") and step 4 ("Review and undo") titles → both added to intro_read → now 4/6 done. Capture before …, assert before.done === "4". … Re-render with stored: saved (simulated restart). Capture after, assert after deep-equals before.
+>
+> One design note: I chose not to vary sessions beyond 1 because any other value changes the done count (0 → 3/6, 2 → 5/6), which would violate the fixed "4/6" acceptance criterion.
+
+**opencode's generator and property (excerpt from the file it wrote):**
+
+```ts
+const setup = fc.record({
+  provider: fc.constantFrom(undefined, "opencode"),
+  costs: fc.constant([0]),
+  sessions: fc.constant(1),
+  files: fc.oneof(
+    fc.constant(["AGENTS.md"]),
+    fc.constant(["AGENTS.md", "README.md"]),
+    fc.constant(["AGENTS.md", "src"]),
+  ),
+})
+...
+// Read steps 3 ("Plan first, then build") and 4 ("Review and undo") to reach 4/6
+await click(first.app, STEPS[3].title)
+await click(first.app, STEPS[4].title)
+const before = progressShown(first.app.captureCharFrame())
+expect(before.done).toBe("4")
+...
+expect(after).toEqual(before)
+```
+
+**opencode's result:** "Done. Created packages/tui/test/feature-plugins/intro.opencode.property.test.ts and verified it passes (1 pass, 160 expect() calls, ~5s)."
 
 ### The mutant it let survive
 
-Stryker's `StringLiteral` mutant on step 3: the "done" message is emptied, so the status line no longer says why the step is done or mentions AGENTS.md.
+**H1** (targets R1): the step the intro opens on by itself is saved as read, so each restart checks off one more step.
 
 ```diff
--      because: "This project already has an AGENTS.md file.",
-+      because: "",
+-    untrack(() => setExpanded(firstUnfinished(progress(), read())))
++    untrack(() => {
++      const step = firstUnfinished(progress(), read())
++      setExpanded(step)
++      if (!read().includes(step)) props.api.kv.set("intro_read", [...read(), step])
++    })
 ```
+
+Results of all my hand-written mutants against opencode's property:
+
+| Mutant | Requirement | Result |
+|---|---|---|
+| H1 | R1 | **Survived** |
+| H2 | R3 | Survived |
+| H3 | R3 | Killed |
+| H4 | R4 | Survived |
+| H5 | R4 | Survived |
+
+H1 is the failure case: it targets R1, the requirement opencode was asked to test. (H2, H4, and H5 target other requirements, so it is expected that an R1 property misses them.)
 
 ### Why the property was too weak
 
-It was an **always-passing property**: the assertion restated the implementation. The expected text was built from `STEPS`, which the test imports from the same file it is testing, so when the mutant emptied `because`, the expected text became empty too:
-
-```ts
-const verify = STEPS[step].verify!
-if (done) expect(text).toContain(`✓ Done. ${verify.because}`)
-if (!done) expect(text).toContain(`○ Not done yet. This checks off when ${verify.when}.`)
-```
-
-The extra step 3 check did not help either. It searched the whole screen for "AGENTS.md" and "/init", and step 3's body text always contains both words, so it passed no matter what the status line said.
+It was a **generator that never reaches the bug**. To keep the intro at exactly 4/6, opencode fixed the setup so a provider is never connected. That means step 1 is always unfinished, so the step the intro opens on by itself is always step 1. Step 1 is a verified step, and marking a verified step as read changes nothing, so H1 has no visible effect. H1 only shows up when the intro opens on step 4 or 5 (the steps that are checked off by reading), which needs steps 1–3 to be done first, and opencode's generator never produces that setup.
 
 ### Strengthened version
 
-The test now finds the status line itself and checks it against its own wording, written in the oracle instead of copied from `STEPS`:
+I added a second setup where steps 1–3 are already done (a connected provider, one session, and AGENTS.md or CLAUDE.md). The intro then opens on step 4 by itself, and the user reads only step 5 to reach 4/6. Each setup lists the steps to click in `toRead`:
 
 ```ts
-for (const [step, done, why, todo] of oracle(env)) {
-  await expand(intro, step)
-  // The status line is checked against our own wording, not the text in STEPS
-  const status = statusLine(intro.app.captureCharFrame())
-  if (done) expect(status).toStartWith("✓ Done.")
-  if (done) expect(status).toContain(why)
-  if (!done) expect(status).toStartWith("○ Not done yet.")
-  if (!done) expect(status).toContain(todo)
-}
+const setup = fc.oneof(
+  fc.record({
+    provider: fc.constantFrom(undefined, "opencode"),
+    costs: fc.constant<number[]>([0]),
+    sessions: fc.constant(1),
+    files: fc.constantFrom<string[]>(["AGENTS.md"], ["AGENTS.md", "README.md"], ["AGENTS.md", "src"]),
+    toRead: fc.constant([3, 4]),
+  }),
+  fc.record({
+    provider: fc.constant("anthropic"),
+    costs: fc.constant<number[]>([0]),
+    sessions: fc.constant(1),
+    files: fc.constantFrom<string[]>(["AGENTS.md"], ["CLAUDE.md"]),
+    toRead: fc.constant([4]),
+  }),
+)
+...
+// Read the steps needed to reach 4/6
+for (const step of env.toRead) await click(first.app, STEPS[step].title)
 ```
 
-For step 3, the oracle expects "AGENTS.md" when done and "/init" when not done, which is what R3's acceptance criterion says. This also found a real gap: step 3's "not done" line never mentioned /init, so its text was changed to "your project has an AGENTS.md (run /init to create one)".
+The assertions are unchanged. The acceptance criterion still holds (4/6 before and after a restart), but now the intro can open on a step that is checked off by reading.
 
 ### Evidence it kills the mutant
 
-Same mutant, run against both versions of R3 (`bun test test/feature-plugins/intro.property.test.ts -t "R3"`):
+H1 run against both versions (`bun test test/feature-plugins/intro.opencode.property.test.ts`):
 
-| Version | Result |
-|---|---|
-| Original R3 | 1 pass, 0 fail (mutant survives) |
-| Strengthened R3 | 0 pass, 1 fail (mutant killed) |
+| Version | Real code | With H1 |
+|---|---|---|
+| opencode's original | 1 pass | 1 pass (mutant survives) |
+| Strengthened | 1 pass | 0 pass, 1 fail (mutant killed) |
 
-Output from the strengthened R3:
+Output from the strengthened property with H1 applied:
 
 ```
-Counterexample: [{"provider":"anthropic","costs":[0],"sessions":1,"files":["AGENTS.md"],"filesFail":false}]
-error: expect(received).toContain(expected)
-Expected to contain: "AGENTS.md"
-Received: "✓ Done."
-(fail) R3: every verified step's status line matches the user's real setup
+Counterexample: [{"provider":"anthropic","costs":[0],"sessions":1,"files":["AGENTS.md"],"toRead":[4]}]
+Expected: "4"
+Received: "5"
+(fail) R1: restarting OpenCode at 4/6 restores the same progress
 ```
 
-In the full Stryker run, all 8 `when`/`because` mutants on steps 1, 2, 3, and 6 survived the original R3 and are killed by the strengthened one.
-
-
+With steps 1–3 done, the mutant saved the auto-opened step 4 as read, so the intro showed 5/6 instead of 4/6.
