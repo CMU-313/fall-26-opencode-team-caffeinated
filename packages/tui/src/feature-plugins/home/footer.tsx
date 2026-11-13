@@ -4,6 +4,7 @@ import { createMemo, Match, Show, Switch } from "solid-js"
 import { abbreviateHome } from "../../runtime"
 import { useTuiPaths } from "../../context/runtime"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
+import { Spotlight } from "../../ui/spotlight"
 
 const id = "internal:home-footer"
 
@@ -33,20 +34,22 @@ function Mcp(props: { api: TuiPluginApi }) {
 
   return (
     <Show when={has()}>
-      <box gap={1} flexDirection="row" flexShrink={0}>
-        <text fg={theme().text}>
-          <Switch>
-            <Match when={err()}>
-              <span style={{ fg: theme().error }}>⊙ </span>
-            </Match>
-            <Match when={true}>
-              <span style={{ fg: count() > 0 ? theme().success : theme().textMuted }}>⊙ </span>
-            </Match>
-          </Switch>
-          {count()} MCP
-        </text>
-        <text fg={theme().textMuted}>/status</text>
-      </box>
+      <Spotlight id="mcp">
+        <box gap={1} flexDirection="row" flexShrink={0}>
+          <text fg={theme().text}>
+            <Switch>
+              <Match when={err()}>
+                <span style={{ fg: theme().error }}>⊙ </span>
+              </Match>
+              <Match when={true}>
+                <span style={{ fg: count() > 0 ? theme().success : theme().textMuted }}>⊙ </span>
+              </Match>
+            </Switch>
+            {count()} MCP
+          </text>
+          <text fg={theme().textMuted}>/status</text>
+        </box>
+      </Spotlight>
     </Show>
   )
 }

@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index 0b7da72..3fdd344 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -213,7 +213,7 @@ function Intro(props: { api: TuiPluginApi }) {
+ 
+   // Open the next step and move the selection onto it
+   const advance = () => {
+-    const next = Math.min(expanded() + 1, STEPS.length - 1)
++    const next = (expanded() + 1) % STEPS.length
+     setAnswered(false)
+     setExpanded(next)
+     // Every step above the open one is folded, so its row index is its step index.

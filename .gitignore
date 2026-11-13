@@ -11,3 +11,6 @@ test-results/.last-run.json
 openrouter.txt
 reports/
 .stryker-tmp/
+# Stryker mutation testing
+packages/tui/.stryker-tmp/
+packages/tui/reports/

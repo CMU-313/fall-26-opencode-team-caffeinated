@@ -243,7 +243,7 @@ async function expand(intro: Awaited<ReturnType<typeof renderIntro>>, step: numb
 function progressShown(frame: string) {
   const lines = frame.split("\n")
   return {
-    done: frame.match(/(\d)\/6 done/)?.[1],
+    done: frame.match(new RegExp(`(\\d)/${STEPS.length} done`))?.[1],
     checked: STEPS.map((step) => lines.find((line) => line.includes(step.title))?.includes("✓")),
   }
 }
