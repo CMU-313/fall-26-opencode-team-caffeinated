@@ -14,9 +14,9 @@ const ABOUT =
   "OpenCode is an AI coding assistant that lives in your terminal. Tell it what you want in plain English and it reads your code, edits files, and runs commands for you. You can review and undo everything it does."
 
 // What OpenCode can see about the user's real setup
-type Progress = { connected: boolean; sessions: number; instructions: boolean }
+export type Progress ={ connected: boolean; sessions: number; instructions: boolean }
 
-const STEPS = [
+export const STEPS = [
   {
     title: "Connect a model",
     body: "OpenCode comes with a few free models so you can try it right away. For better results, run `/connect` to sign in to a provider like Anthropic, OpenAI, or GitHub Copilot. Then run `/models` to pick which one to use.",
@@ -48,7 +48,7 @@ const STEPS = [
     body: "Type `@` and a file name to attach that file to your message. Start a message with `!` to run a shell command yourself, like `!npm test`. Run `/init` once in a new project so OpenCode writes an AGENTS.md file that explains how your project works.",
     tryIt: undefined,
     verify: {
-      when: "your project has an AGENTS.md",
+      when: "your project has an AGENTS.md (run /init to create one)",
       because: "This project already has an AGENTS.md file.",
       done: (progress: Progress) => progress.instructions,
     },
@@ -89,6 +89,19 @@ const STEPS = [
   },
 ]
 
+// A verified step follows the user's real setup; any other step is done once it has been read
+export function isComplete(index: number, progress: Progress, read: number[]) {
+  return STEPS[index].verify?.done(progress) ?? read.includes(index)
+}
+
+// The intro opens at the first unfinished step, or step 1 when everything is done
+export function firstUnfinished(progress: Progress, read: number[]) {
+  return Math.max(
+    0,
+    STEPS.findIndex((_, index) => !isComplete(index, progress, read)),
+  )
+}
+
 // Auto-open once per launch, not every time the user comes back to the home screen
 let autoOpened = false
 
@@ -114,19 +127,12 @@ function Intro(props: { api: TuiPluginApi }) {
     sessions: props.api.state.session.count(),
     instructions: instructions() === true,
   }))
-  const complete = (index: number) => STEPS[index].verify?.done(progress()) ?? read().includes(index)
+  const complete = (index: number) => isComplete(index, progress(), read())
   const [expanded, setExpanded] = createSignal(-1)
   // Open at the first step the user hasn't done yet, once the AGENTS.md check has finished
   createEffect(() => {
     if (instructions.loading) return
-    untrack(() =>
-      setExpanded(
-        Math.max(
-          0,
-          STEPS.findIndex((_, index) => !complete(index)),
-        ),
-      ),
-    )
+    untrack(() => setExpanded(firstUnfinished(progress(), read())))
   })
   const [answered, setAnswered] = createSignal(false)
   const [selected, setSelected] = createSignal(0)
@@ -148,11 +154,6 @@ function Intro(props: { api: TuiPluginApi }) {
     { kind: "launch" as const, step: -1 },
     { kind: "reset" as const, step: -1 },
   ])
-
-  createEffect(() => {
-    if (expanded() < 0 || read().includes(expanded())) return
-    props.api.kv.set("intro_read", [...read(), expanded()])
-  })
 
   const select = (index: number) => {
     const row = rows()[index]
@@ -176,7 +177,11 @@ function Intro(props: { api: TuiPluginApi }) {
       setSelected(0)
       return setExpanded(0)
     }
-    setExpanded(expanded() === row.step ? -1 : row.step)
+    if (expanded() === row.step) return setExpanded(-1)
+    // Only a step the user opens counts as read. The step the intro opens on its own does not, or every
+    // restart would check off one more step without the user doing anything
+    if (!read().includes(row.step)) props.api.kv.set("intro_read", [...read(), row.step])
+    setExpanded(row.step)
   }
 
   useBindings(() => ({
@@ -226,7 +231,7 @@ function Intro(props: { api: TuiPluginApi }) {
               return (
                 <text fg={color(theme().textMuted)} onMouseOver={hover} onMouseUp={click}>
                   {prefix()}
-                  {props.api.kv.get("intro_hide_on_launch", false) ? "☐" : "☑"} Show this when OpenCode starts
+                  {props.api.kv.get("intro_hide_on_launch", false) ? "☐" : "☑"} Show this when OpenCode starts (enter to toggle)
                 </text>
               )
             if (row.kind === "reset")

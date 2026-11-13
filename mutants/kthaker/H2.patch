@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index f95d11b..9a3d7ca 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -91,7 +91,7 @@ export const STEPS = [
+ 
+ // A verified step follows the user's real setup; any other step is done once it has been read
+ export function isComplete(index: number, progress: Progress, read: number[]) {
+-  return STEPS[index].verify?.done(progress) ?? read.includes(index)
++  return STEPS[index].verify?.done(progress) || read.includes(index)
+ }
+ 
+ // The intro opens at the first unfinished step, or step 1 when everything is done

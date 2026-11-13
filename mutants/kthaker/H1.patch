@@ -1,0 +1,17 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index f95d11b..c23a17f 100644
+--- a/packages/tui/src/feature-plugins/home/intro.tsx
++++ b/packages/tui/src/feature-plugins/home/intro.tsx
+@@ -132,7 +132,11 @@ function Intro(props: { api: TuiPluginApi }) {
+   // Open at the first step the user hasn't done yet, once the AGENTS.md check has finished
+   createEffect(() => {
+     if (instructions.loading) return
+-    untrack(() => setExpanded(firstUnfinished(progress(), read())))
++    untrack(() => {
++      const step = firstUnfinished(progress(), read())
++      setExpanded(step)
++      if (!read().includes(step)) props.api.kv.set("intro_read", [...read(), step])
++    })
+   })
+   const [answered, setAnswered] = createSignal(false)
+   const [selected, setSelected] = createSignal(0)
