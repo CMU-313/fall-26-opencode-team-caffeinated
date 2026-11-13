@@ -1,22 +1,24 @@
+diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
+index 0b7da72..f0ade09 100644
 --- a/packages/tui/src/feature-plugins/home/intro.tsx
 +++ b/packages/tui/src/feature-plugins/home/intro.tsx
-@@ -217,6 +217,11 @@ function Intro(props: { api: TuiPluginApi }) {
+@@ -225,6 +225,11 @@ function Intro(props: { api: TuiPluginApi }) {
    createEffect(() => setSpotlight(STEPS[expanded()]?.spotlight))
    onCleanup(() => setSpotlight(undefined))
  
 +  // The tour counts as seen once the user reaches the last step
 +  createEffect(() => {
-+    if (expanded() === STEPS.length - 1) props.api.kv.set("intro_seen", true)
++    if (expanded() === STEPS.length - 1) props.api.kv.set("intro_hide_on_launch", true)
 +  })
 +
    useBindings(() => ({
      bindings: [
        { key: "up", desc: "Previous", group: "Intro", cmd: () => setSelected((i) => Math.max(0, i - 1)) },
-@@ -406,7 +411,6 @@ const tui: TuiPlugin = async (api) => {
-         // Saved as soon as it opens, so closing it at any step still counts as seen
-         createEffect(() => {
-           if (!api.kv.ready || api.kv.get("intro_seen", false) || api.ui.dialog.open) return
--          api.kv.set("intro_seen", true)
+@@ -417,7 +422,6 @@ const tui: TuiPlugin = async (api) => {
+           if (api.kv.get("intro_hide_on_launch", false) || api.ui.dialog.open) return
+           // vvishwan (R1): show the tour only on the first launch. Turning the launch setting off as soon as it opens
+           // means closing it at any step still counts as seen; re-checking the launch row or /intro brings it back
+-          api.kv.set("intro_hide_on_launch", true)
            open(api)
          })
          return (

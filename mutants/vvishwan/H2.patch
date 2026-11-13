@@ -1,13 +1,10 @@
 diff --git a/packages/tui/src/feature-plugins/home/intro.tsx b/packages/tui/src/feature-plugins/home/intro.tsx
-index b12fef4..b04fd3f 100644
+index 0b7da72..3fdd344 100644
 --- a/packages/tui/src/feature-plugins/home/intro.tsx
 +++ b/packages/tui/src/feature-plugins/home/intro.tsx
-@@ -203,9 +203,9 @@ function Intro(props: { api: TuiPluginApi }) {
-     setExpanded(expanded() === row.step ? -1 : row.step)
-   }
+@@ -213,7 +213,7 @@ function Intro(props: { api: TuiPluginApi }) {
  
--  // Open the next step and move the selection onto it
-+  // Open the next step and move the selection onto it; past the last step it starts over at the first
+   // Open the next step and move the selection onto it
    const advance = () => {
 -    const next = Math.min(expanded() + 1, STEPS.length - 1)
 +    const next = (expanded() + 1) % STEPS.length

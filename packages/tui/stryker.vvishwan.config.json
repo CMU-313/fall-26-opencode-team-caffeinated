@@ -6,12 +6,12 @@
   },
   "coverageAnalysis": "off",
   "mutate": [
-    "src/feature-plugins/home/intro.tsx:119-122",
-    "src/feature-plugins/home/intro.tsx:207-214",
-    "src/feature-plugins/home/intro.tsx:217-218",
-    "src/feature-plugins/home/intro.tsx:224-224",
-    "src/feature-plugins/home/intro.tsx:330-335",
-    "src/feature-plugins/home/intro.tsx:385-411"
+    "src/feature-plugins/home/intro.tsx:135-138",
+    "src/feature-plugins/home/intro.tsx:215-222",
+    "src/feature-plugins/home/intro.tsx:225-226",
+    "src/feature-plugins/home/intro.tsx:232-232",
+    "src/feature-plugins/home/intro.tsx:338-343",
+    "src/feature-plugins/home/intro.tsx:393-422"
   ],
   "concurrency": 2,
   "timeoutMS": 60000,
