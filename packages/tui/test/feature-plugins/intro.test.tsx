@@ -499,8 +499,14 @@ async function openTour(input: Parameters<typeof renderIntro>[0]) {
   const intro = await renderIntro(input)
   intro.commands.get("intro.open")!.run?.({} as never)
   await intro.app.waitForFrame((frame) => tourSteps(frame).open === 0)
-  // The spotlight stand-ins wait for the theme to load, which can land a frame after the tour
-  if (input.extra) await intro.app.waitForFrame((frame) => frame.includes("MCP-CONTROL"))
+  // The spotlight stand-ins wait for the theme, which loads files and queries the terminal outside the render
+  // loop. Wait on the clock, not a fixed number of render passes, so a slow CI machine still gets there
+  const deadline = Date.now() + 10_000
+  while (input.extra && !intro.app.captureCharFrame().includes("MCP-CONTROL")) {
+    expect(Date.now()).toBeLessThan(deadline)
+    await Bun.sleep(10)
+    await intro.app.renderOnce()
+  }
   return intro
 }
 
